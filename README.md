@@ -21,14 +21,14 @@ composer require mindtwo/laravel-translatable
 You can publish and run the migrations with:
 
 ```bash
-php artisan vendor:publish --tag="laravel-translatable-migrations"
+php artisan vendor:publish --tag="translatable-migrations"
 php artisan migrate
 ```
 
 You can publish the config file with:
 
 ```bash
-php artisan vendor:publish --tag="laravel-translatable-config"
+php artisan vendor:publish --tag="translatable-config"
 ```
 
 This is the contents of the published config file:
