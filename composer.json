@@ -16,8 +16,9 @@
         }
     ],
     "require": {
-        "php": "^8.1",
-        "illuminate/contracts": "^10.0",
+        "php": "^8.2",
+        "illuminate/contracts": "^10.18",
+        "illuminate/database": "^10.18",
         "mindtwo/laravel-auto-create-uuid": "^2.6",
         "spatie/laravel-package-tools": "^1.14.0"
     },
