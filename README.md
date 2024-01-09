@@ -39,7 +39,7 @@ This is the contents of the published config file:
 use mindtwo\LaravelTranslatable\Models\Translatable;
 
 return [
-    'models' => Translatable::class,
+    'model' => Translatable::class,
 ];
 ```
 

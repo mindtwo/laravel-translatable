@@ -13,7 +13,7 @@ trait HasTranslations
      */
     public function translations(): MorphMany
     {
-        return $this->morphMany(Translatable::class, 'translatable');
+        return $this->morphMany(config('translatable.model', Translatable::class), 'translatable');
     }
 
     /**

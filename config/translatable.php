@@ -3,5 +3,5 @@
 use mindtwo\LaravelTranslatable\Models\Translatable;
 
 return [
-    'models' => Translatable::class,
+    'model' => Translatable::class,
 ];
