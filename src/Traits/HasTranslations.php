@@ -34,7 +34,7 @@ trait HasTranslations
     /**
      * Get the translation for the given locale.
      */
-    public function getTranslation(string $key, ?string $locale = null): Translatable
+    public function getTranslation(string $key, ?string $locale = null): ?Translatable
     {
         if (is_null($locale)) {
             $locale = app()->getLocale();
