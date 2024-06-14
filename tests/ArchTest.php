@@ -1,16 +1,25 @@
 <?php
 
-arch('it will not use debugging functions dd')
-    ->expect('dd')
-    ->not->toBeUsed()
-    ->ignoring('mindtwo\LaravelTranslatable\Nova\Fields');
+arch('globals dd')
+    ->expect('mindtwo\LaravelTranslatable\Traits')
+    ->not->toUse('dd');
 
-arch('it will not use debugging functions dump')
-    ->expect('dump')
-    ->not->toBeUsed()
-    ->ignoring('mindtwo\LaravelTranslatable\Nova\Fields');
+arch('globals dump')
+    ->expect('mindtwo\LaravelTranslatable\Traits')
+    ->not->toUse('dump');
 
-arch('it will not use debugging functions ray')
-    ->expect('ray')
-    ->not->toBeUsed()
-    ->ignoring('mindtwo\LaravelTranslatable\Nova\Fields');
+arch('globals ray')
+    ->expect('mindtwo\LaravelTranslatable\Traits')
+    ->not->toUse('ray');
+
+arch('globals dd 2')
+    ->expect('mindtwo\LaravelTranslatable\Models')
+    ->not->toUse('dd');
+
+arch('globals dump 2')
+    ->expect('mindtwo\LaravelTranslatable\Models')
+    ->not->toUse('dump');
+
+arch('globals ray 2')
+    ->expect('mindtwo\LaravelTranslatable\Models')
+    ->not->toUse('ray');
