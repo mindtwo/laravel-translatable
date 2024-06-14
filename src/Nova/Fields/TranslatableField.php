@@ -30,6 +30,10 @@ class TranslatableField extends Field
      */
     public function fillModelWithData(mixed $model, mixed $value, string $attribute)
     {
+        if (! $model instanceof \mindtwo\LaravelTranslatable\Contracts\IsTranslatable) {
+            throw new \InvalidArgumentException('The model must implement the IsTranslatable interface.');
+        }
+
         // Create or update translations from the given value
         foreach ($value as $locale => $translation) {
             $model->translations()->updateOrCreate(
