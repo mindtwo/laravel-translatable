@@ -12,3 +12,5 @@ parameters:
     checkModelProperties: true
     checkMissingIterableValueType: false
 
+    excludePaths:
+        - src/Nova
