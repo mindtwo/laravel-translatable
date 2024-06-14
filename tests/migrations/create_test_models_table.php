@@ -12,6 +12,11 @@ return new class extends Migration
             $table->id();
             $table->timestamps();
         });
+
+        Schema::create('test_model_with_translations', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+        });
     }
 
     /**
@@ -20,5 +25,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('test_model');
+        Schema::dropIfExists('test_model_with_translations');
     }
 };
