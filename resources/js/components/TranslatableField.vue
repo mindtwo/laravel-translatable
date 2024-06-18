@@ -26,7 +26,6 @@ export default {
     },
     mounted() {
         // Load existing localizations if available
-        console.log(this.field);
         if (this.field.value) {
             this.values = this.field.value;
         }
