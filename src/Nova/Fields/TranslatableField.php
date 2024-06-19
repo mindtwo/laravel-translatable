@@ -36,6 +36,15 @@ class TranslatableField extends Field
 
         // Create or update translations from the given value
         foreach ($value as $locale => $translation) {
+            if (empty($translation)) {
+                $model->translations()->where([
+                    'locale' => $locale,
+                    'key' => $this->meta['key'],
+                ])->delete();
+
+                continue;
+            }
+
             $model->translations()->updateOrCreate(
                 [
                     'locale' => $locale,
