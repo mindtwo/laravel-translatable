@@ -64,6 +64,10 @@ class TranslatableField extends Field
      */
     protected function resolveAttribute($resource, $attribute)
     {
+        if (is_array($resource)) {
+            return $resource;
+        }
+
         // Get translations for the given key
         return $resource->getTranslations($this->meta['key']);
     }
