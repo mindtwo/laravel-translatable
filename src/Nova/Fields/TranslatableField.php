@@ -10,7 +10,7 @@ class TranslatableField extends Field
 
     public function __construct($name, ?string $key = null)
     {
-        parent::__construct($name, 'translations', function ($value, $resource, $attribute) {
+        parent::__construct($name, $key, function ($value, $resource, $attribute) {
             // Create a value map locale => translation
             $value = collect($value)->mapWithKeys(function ($item) {
                 return [$item['locale'] => $item['text']];
