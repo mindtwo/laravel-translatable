@@ -2,6 +2,7 @@
 
 namespace mindtwo\LaravelTranslatable\Nova\Fields;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
@@ -121,13 +122,27 @@ class TranslatableField extends Field
         if ($model instanceof \Laravel\Nova\Support\Fluent) {
             $attributes = $model->getAttributes();
 
-            $model = $this->model::find($attributes['id']);
+            $findModel = $this->model::find($attributes['id']);
 
-            if (! $model) {
+            if (! $findModel) {
+                // create a uuid to identify the model later
+                $uuid = $model->uuid ?? Str::uuid()->toString();
+
+                $model->uuid = $uuid;
+                // wait for a model to be created
+                $this->model::created(function ($created) use ($uuid, $value, $attribute) {
+                    // skip if the model is not the one we are looking for
+                    if (! $created->uuid || $created->uuid !== $uuid) {
+                        return;
+                    }
+
+                    $this->upsertModelTranslation($created, $value, $attribute);
+                });
+
                 return;
             }
 
-            $this->upsertModelTranslation($model, $value, $attribute);
+            $this->upsertModelTranslation($findModel, $value, $attribute);
 
             return;
         }
@@ -142,6 +157,8 @@ class TranslatableField extends Field
 
     /**
      * Create or update translations for the given model.
+     *
+     * @param  \mindtwo\LaravelTranslatable\Contracts\IsTranslatable & Model  $model
      */
     protected function upsertModelTranslation(IsTranslatable $model, mixed $value, string $attribute): void
     {
@@ -155,9 +172,18 @@ class TranslatableField extends Field
             return;
         }
 
-        dump($attribute);
         if (! $model->exists) {
-            $model::created(function ($model) use ($value, $attribute) {
+            // create a uuid to identify the model later
+            $uuid = $model->uuid ?? Str::uuid()->toString();
+
+            $model->uuid = $uuid;
+            // wait for a model to be created
+            $model::created(function ($model) use ($value, $attribute, $uuid) {
+                // skip if the model is not the one we are looking for
+                if (! $model->uuid || $model->uuid !== $uuid) {
+                    return;
+                }
+
                 $this->upsertModelTranslation($model, $value, $attribute);
             });
 
