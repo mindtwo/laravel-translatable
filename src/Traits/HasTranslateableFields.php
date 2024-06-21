@@ -12,11 +12,16 @@ trait HasTranslateableFields
      */
     public function getTranslatedAttribute($key)
     {
-        if (! $this->hasTranslation($key)) {
-            return null;
+        // Try to get the translation for the current locale
+        if ($this->hasTranslation($key)) {
+            return $this->getTranslation($key)->text;
         }
 
-        return $this->getTranslation($key)->text;
+        if ($this->hasTranslation($key, $this->getFallbackTranslationLocale())) {
+            return $this->getTranslation($key, $this->getFallbackTranslationLocale())->text;
+        }
+
+        return null;
     }
 
     /**
@@ -74,5 +79,27 @@ trait HasTranslateableFields
         }
 
         return parent::getAttribute($name);
+    }
+
+    /**
+     * Get the fallback translation locale.
+     *
+     * @param  string  $key
+     * @param  string|null  $locale
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
+    protected function getFallbackTranslationLocale()
+    {
+        // Get the fallback locale from the model via method
+        if (method_exists($this, 'getTranslatableFallback')) {
+            return $this->getTranslatableFallback();
+        }
+
+        // Get the fallback locale from the model via method
+        if (property_exists($this, 'translatableFallback')) {
+            return $this->translatableFallback;
+        }
+
+        return config('app.fallback_locale');
     }
 }
