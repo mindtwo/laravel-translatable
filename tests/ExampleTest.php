@@ -140,3 +140,18 @@ test('dynamic mutator for model translations works correctly', function () {
     $model->title = 'New Title';
     expect($model->title)->toBe('New Title');
 });
+
+test('dynamic accessor uses fallback if translation is missing', function () {
+    $model = TestModelWithTranslations::create();
+
+    $model->translations()->create([
+        'key' => 'title',
+        'locale' => 'en',
+        'text' => 'Test Title',
+    ]);
+
+    expect($model->title)->toBe('Test Title');
+
+    app()->setLocale('de');
+    expect($model->title)->toBe('Test Title');
+});
