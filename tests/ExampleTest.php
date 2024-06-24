@@ -36,6 +36,11 @@ beforeEach(function () {
             protected $guarded = [];
 
             protected $translatable = ['title'];
+
+            protected function getTitleAttribute()
+            {
+                return 'not translated';
+            }
         }
     }
 });
@@ -154,4 +159,22 @@ test('dynamic accessor uses fallback if translation is missing', function () {
 
     app()->setLocale('de');
     expect($model->title)->toBe('Test Title');
+});
+
+test('can disable translations for a model', function () {
+    $model = TestModelWithTranslations::create();
+
+    $model->translations()->create([
+        'key' => 'title',
+        'locale' => 'en',
+        'text' => 'Test Title',
+    ]);
+
+    expect($model->title)->toBe('Test Title');
+
+    $notTranslatedAttrValue = TestModelWithTranslations::withoutTranslations(fn () => $model->title);
+
+    // app()->setLocale('de');
+    expect($notTranslatedAttrValue)->toBe('not translated')
+        ->and($model->title)->toBe('Test Title');
 });
