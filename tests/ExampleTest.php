@@ -178,3 +178,66 @@ test('can disable translations for a model', function () {
     expect($notTranslatedAttrValue)->toBe('not translated')
         ->and($model->title)->toBe('Test Title');
 });
+
+test('scope order by translation', function () {
+    $orderedTitles = collect([
+        'foo',
+        'bar',
+        'baz',
+        'qux',
+        'quux',
+    ])->sort()->values()->toArray();
+
+    $shuffledTitles = collect($orderedTitles)->shuffle()->values()->toArray();
+
+    $models = collect($shuffledTitles)->map(function ($title) {
+        $model = TestModelWithTranslations::create();
+
+        $model->translations()->create([
+            'key' => 'title',
+            'locale' => 'en',
+            'text' => $title,
+        ]);
+
+        return $model;
+    });
+
+    expect(TestModelWithTranslations::count())->toBe(5);
+
+    expect($models->pluck('title')->toArray())->toBe($shuffledTitles);
+    $orderedModels = TestModelWithTranslations::orderByTranslation('title')->get();
+
+    $modelTitles = $orderedModels->pluck('title')->toArray();
+
+    expect($modelTitles)->not->toBe($shuffledTitles)
+        ->and($models->pluck('title')->toArray())->toBe($shuffledTitles);
+
+    expect($modelTitles)->toBe($orderedTitles);
+});
+
+test('scope search by translation', function () {
+    $models = collect([
+        'foo',
+        'bar',
+        'baz',
+        'qux',
+        'quux',
+    ])->map(function ($title) {
+        $model = TestModelWithTranslations::create();
+
+        $model->translations()->create([
+            'key' => 'title',
+            'locale' => 'en',
+            'text' => $title,
+        ]);
+
+        return $model;
+    });
+
+    expect(TestModelWithTranslations::count())->toBe(5);
+
+    $searchResults = TestModelWithTranslations::searchByTranslation('title', 'ba')->get();
+
+    expect($searchResults->count())->toBe(2);
+    expect($searchResults->pluck('title')->toArray())->toContain('bar', 'baz');
+});
