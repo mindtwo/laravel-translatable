@@ -5,6 +5,13 @@ namespace mindtwo\LaravelTranslatable\Traits;
 trait HasTranslateableFields
 {
     /**
+     * Disable translations.
+     *
+     * @var bool
+     */
+    protected static $disabledTranslations = false;
+
+    /**
      * Get translated attribute.
      *
      * @param  mixed  $key
@@ -57,6 +64,10 @@ trait HasTranslateableFields
      */
     public function setAttribute($key, $value)
     {
+        if (static::$disabledTranslations === true) {
+            return parent::setAttribute($key, $value);
+        }
+
         // If the attribute is marked as translatable, set the translated value
         if (property_exists($this, 'translatable') && in_array($key, $this->translatable)) {
             return $this->setTranslation($key, $value);
@@ -73,6 +84,11 @@ trait HasTranslateableFields
      */
     public function getAttribute($name)
     {
+        // if we disable the translation, return the original value
+        if (static::$disabledTranslations === true) {
+            return parent::getAttribute($name);
+        }
+
         // If the attribute is marked as translatable, return the translated value
         if (property_exists($this, 'translatable') && in_array($name, $this->translatable)) {
             return $this->getTranslatedAttribute($name);
@@ -101,5 +117,22 @@ trait HasTranslateableFields
         }
 
         return config('app.fallback_locale');
+    }
+
+    /**
+     * Disable translations.
+     *
+     * @param  callable  $callback
+     * @return mixed
+     */
+    public static function withoutTranslations($callback)
+    {
+        static::$disabledTranslations = true;
+
+        $result = $callback();
+
+        static::$disabledTranslations = false;
+
+        return $result;
     }
 }
