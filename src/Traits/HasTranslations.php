@@ -4,8 +4,15 @@ namespace mindtwo\LaravelTranslatable\Traits;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Query\JoinClause;
 use mindtwo\LaravelTranslatable\Models\Translatable;
 
+/**
+ * Trait HasTranslations.
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder orderByTranslation(string $key, ?string $locale = null, string $direction = 'asc')
+ * @method static \Illuminate\Database\Eloquent\Builder searchByTranslation(string|array $key, string $search, ?string $locale = null)
+ */
 trait HasTranslations
 {
     /**
@@ -63,5 +70,52 @@ trait HasTranslations
             })->get();
 
         return $translatableRecords;
+    }
+
+    /**
+     * Add scope to order translations by locale value.
+     */
+    public function scopeOrderByTranslation($query, string $key, ?string $locale = null, $direction = 'asc'): void
+    {
+        $keyName = $this->getKeyName();
+
+        $query
+            // ->select($this->getTable().'.*')
+            ->join('translatable', function (JoinClause $join) use ($keyName, $key, $locale) {
+                $join->on($this->getTable().'.'.$keyName, '=', 'translatable.translatable_id')
+                    ->where('translatable.translatable_type', self::class)
+                    ->where('translatable.key', $key)
+                    ->where('translatable.locale', $locale ?? app()->getLocale());
+            })
+            ->orderBy('translatable.text', $direction);
+    }
+
+    /**
+     * Add scope to search for translations.
+     */
+    public function scopeSearchByTranslation($query, string|array $key, string $search, ?string $locale = null): void
+    {
+        // multiple keys
+        if (is_array($key)) {
+            $query->whereHas('translations', function ($query) use ($key, $search, $locale) {
+                $query->where(function ($query) use ($key, $search, $locale) {
+                    foreach ($key as $k) {
+                        $query->orWhere(function ($query) use ($k, $search, $locale) {
+                            $query->where('key', $k)
+                                ->where('locale', $locale ?? app()->getLocale())
+                                ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
+                        });
+                    }
+                });
+            });
+
+            return;
+        }
+
+        $query->whereHas('translations', function ($query) use ($key, $search, $locale) {
+            $query->where('key', $key)
+                ->where('locale', $locale ?? app()->getLocale())
+                ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
+        });
     }
 }
