@@ -3,7 +3,6 @@
 namespace mindtwo\LaravelTranslatable\Nova\Fields;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -27,6 +26,8 @@ class TranslatableField extends Field
     public $inputType = 'text';
 
     public ?Resource $repeateableResource = null;
+
+    protected array $localeRules = [];
 
     public function __construct($name, ?string $key = null)
     {
@@ -66,9 +67,9 @@ class TranslatableField extends Field
 
     protected function getLocaleRules(NovaRequest $request, bool $withLocales = false): array
     {
-        $rules = is_callable($this->rules) ? call_user_func($this->rules, $request) : $this->rules;
-
         if (! $withLocales) {
+            $rules = is_callable($this->rules) ? call_user_func($this->rules, $request) : $this->rules;
+
             return [
                 $this->attribute => $rules,
             ];
@@ -76,7 +77,7 @@ class TranslatableField extends Field
 
         // Validate the field for each locale
         return [
-            $this->attribute => function (string $attribute, mixed $value, \Closure $fail) use ($rules) {
+            $this->attribute => function (string $attribute, mixed $value, \Closure $fail) use ($request) {
                 $value = json_decode($value, true);
                 if (empty($value) || ! is_array($value)) {
                     $fail("The {$attribute} is invalid.");
@@ -85,7 +86,9 @@ class TranslatableField extends Field
                 }
 
                 // Create a rule map for each locale
-                $localeRuleMap = array_reduce($this->meta['locales'], function ($carry, $locale) use ($rules) {
+                $localeRuleMap = array_reduce($this->meta['locales'], function ($carry, $locale) use ($request) {
+                    $rules = $this->getRulesForLocale($locale, $request);
+
                     $carry[$locale] = $rules;
 
                     return $carry;
@@ -97,10 +100,10 @@ class TranslatableField extends Field
                 if ($validator->fails()) {
                     $fail(
                         collect($validator->messages())
-                            ->map(function ($message, $locale) use ($attribute) {
+                            ->map(function ($message, $locale) {
                                 $localeKey = str_replace('_', ' ', Str::snake($locale));
 
-                                $attributeName = Arr::get(app('translator')->get('validation.attributes'), $attribute);
+                                $attributeName = "{$this->name} ({$locale})";
 
                                 return Str::replace($localeKey, $attributeName, $message[0]);
                             })
@@ -289,11 +292,21 @@ class TranslatableField extends Field
         return $this->withMeta(['key' => $key]);
     }
 
+    /**
+     * Set the input type for the field to markdown.
+     *
+     * @return $this
+     */
     public function markdown()
     {
         return $this->inputType('markdown');
     }
 
+    /**
+     * Set the input type for the field to textarea.
+     *
+     * @return $this
+     */
     public function textarea()
     {
         return $this->inputType('textarea');
@@ -348,5 +361,31 @@ class TranslatableField extends Field
 
             return json_decode($value, true);
         });
+    }
+
+    /**
+     * Set the rules for the field for a specific language.
+     *
+     * @return $this
+     */
+    public function rulesFor(string $locale, array|\Closure $rules)
+    {
+        $this->localeRules[$locale] = $rules;
+
+        return $this;
+    }
+
+    /**
+     * Get the rules for the field for a specific language.
+     */
+    protected function getRulesForLocale(string $locale, NovaRequest $request): array
+    {
+        $rules = $this->localeRules[$locale] ?? $this->rules ?? [];
+
+        if (is_callable($rules)) {
+            return call_user_func($rules, $request);
+        }
+
+        return $rules;
     }
 }
