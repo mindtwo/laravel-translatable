@@ -32,30 +32,6 @@ trait HasTranslateableFields
     }
 
     /**
-     * Get translation.
-     *
-     * @param  string  $key
-     * @param  string|null  $locale
-     * @return \Illuminate\Database\Eloquent\Model|null
-     */
-    public function setTranslation($key, $value)
-    {
-        $locale = app()->getLocale();
-
-        if ($this->hasTranslation($key, $locale)) {
-            $this->getTranslation($key, $locale)->update(['text' => $value]);
-        } else {
-            $this->translations()->create([
-                'key' => $key,
-                'locale' => $locale,
-                'text' => $value,
-            ]);
-        }
-
-        return $this;
-    }
-
-    /**
      * Set a given attribute on the model.
      *
      * @param  string  $key
@@ -64,7 +40,7 @@ trait HasTranslateableFields
      */
     public function setAttribute($key, $value)
     {
-        if (static::$disabledTranslations === true) {
+        if (static::$disabledTranslations === true || ! $this instanceof \mindtwo\LaravelTranslatable\Contracts\IsTranslatable) {
             return parent::setAttribute($key, $value);
         }
 

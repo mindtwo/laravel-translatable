@@ -19,6 +19,11 @@ interface IsTranslatable
     public function hasTranslation(string $key, ?string $locale = null): bool;
 
     /**
+     * Set the translation for the given locale.
+     */
+    public function setTranslation(string $key, string $value, ?string $locale = null): self;
+
+    /**
      * Get the translation for the given locale.
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable;

@@ -39,6 +39,28 @@ trait HasTranslations
     }
 
     /**
+     * Set the translation for the given locale.
+     */
+    public function setTranslation(string $key, string $value, ?string $locale = null): self
+    {
+        if (is_null($locale)) {
+            $locale = app()->getLocale();
+        }
+
+        if ($this->hasTranslation($key, $locale)) {
+            $this->getTranslation($key, $locale)->update(['text' => $value]);
+        } else {
+            $this->translations()->create([
+                'key' => $key,
+                'locale' => $locale,
+                'text' => $value,
+            ]);
+        }
+
+        return $this;
+    }
+
+    /**
      * Get the translation for the given locale.
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable

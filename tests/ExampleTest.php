@@ -19,7 +19,7 @@ beforeEach(function () {
 
     // Define a test model using the HasTranslations trait
     if (! class_exists('TestModel')) {
-        class TestModel extends Model
+        class TestModel extends Model implements \mindtwo\LaravelTranslatable\Contracts\IsTranslatable
         {
             use HasTranslations;
 
@@ -28,7 +28,7 @@ beforeEach(function () {
     }
 
     if (! class_exists('TestModelWithTranslations')) {
-        class TestModelWithTranslations extends Model
+        class TestModelWithTranslations extends Model implements \mindtwo\LaravelTranslatable\Contracts\IsTranslatable
         {
             use HasTranslateableFields;
             use HasTranslations;
