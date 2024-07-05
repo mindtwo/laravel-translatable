@@ -53,6 +53,35 @@ trait HasTranslateableFields
     }
 
     /**
+     * Set a given attribute on the model.
+     *
+     * @param  string  $key
+     * @param  mixed  $value
+     * @return self|false - returns false if the attribute is not updated
+     */
+    public function setFallbackAttribute($key, $value, bool $force = false): self|false
+    {
+        if (! $this instanceof \mindtwo\LaravelTranslatable\Contracts\IsTranslatable) {
+            return false;
+        }
+
+        // If the attribute is marked as translatable, set the translated value
+        $locale = $this->getFallbackTranslationLocale();
+
+        // If the translation already exists and we don't want to force the update, return false
+        if ($this->hasTranslation($key, $locale) && ! $force) {
+            return false;
+        }
+
+        // Set the translation if the attribute is marked as translatable
+        if (property_exists($this, 'translatable') && in_array($key, $this->translatable)) {
+            return $this->setTranslation($key, $value, $locale);
+        }
+
+        return false;
+    }
+
+    /**
      * Get attribute.
      *
      * @param  mixed  $name
