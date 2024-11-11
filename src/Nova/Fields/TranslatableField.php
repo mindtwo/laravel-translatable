@@ -27,6 +27,8 @@ class TranslatableField extends Field
 
     public ?Resource $repeateableResource = null;
 
+    protected array $locales = [];
+
     protected array $localeRules = [];
 
     public function __construct($name, ?string $key = null)
@@ -262,10 +264,18 @@ class TranslatableField extends Field
     /**
      * Set the locales for the field.
      *
+     * TODO closure shape
+     *
      * @return $this
      */
-    public function locales(array $locales)
+    public function locales(array|\Closure $locales)
     {
+        if (is_callable($locales)) {
+            $locales = call_user_func($locales);
+        }
+
+        $this->locales = $locales;
+
         return $this->withMeta(['locales' => $locales]);
     }
 
@@ -346,21 +356,50 @@ class TranslatableField extends Field
      */
     public function resolve($resource, $attribute = null)
     {
+        $this->resource = $resource;
         $attribute = $attribute ?? $this->attribute;
 
-        return with(app(NovaRequest::class), function ($request) use ($resource, $attribute) {
+        with(app(NovaRequest::class), function ($request) use ($resource, $attribute) {
             if (! $request->isFormRequest() || ! in_array($request->method(), ['PUT', 'PATCH'])) {
-                return parent::resolve($resource, $attribute);
+                parent::resolve($resource, $attribute);
+
+                return;
             }
 
             $value = $request->input($this->attribute);
 
-            if (! is_string($value)) {
-                return $value;
+            if (is_string($value)) {
+                $value = json_decode($value, true) ?? $value;
             }
 
-            return json_decode($value, true);
+            $this->value = $value;
         });
+    }
+
+    /**
+     * Sync depends on logic.
+     *
+     * @return $this
+     */
+    public function syncDependsOn(NovaRequest $request)
+    {
+
+        $currentValue = $this->value;
+        $currentLocales = ! empty($this->locales) ? $this->locales : array_keys($currentValue);
+
+        $result = parent::syncDependsOn($request);
+
+        if ($result->value === null && count($currentLocales) !== count($result->locales)) {
+            $result->value = array_reduce($result->locales, function ($carry, $locale) use ($currentValue) {
+                $carry[$locale] = $currentValue[$locale] ?? null;
+
+                return $carry;
+            }, []);
+
+            $result->dependentShouldEmitChangesEvent = true;
+        }
+
+        return $result;
     }
 
     /**
