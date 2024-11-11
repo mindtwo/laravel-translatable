@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div :key="locales.length">
         <DefaultField
             v-for="locale in locales"
             :key="locale"
@@ -7,7 +7,6 @@
             :show-help-text="showHelpText"
             :full-width-content="fullWidthContent"
         >
-
             <FormLabel
                 :label-for="getLabelFor(locale)"
                 class="space-x-1"
@@ -69,9 +68,6 @@ import { DependentFormField, HandlesValidationErrors } from 'laravel-nova';
 export default {
     mixins: [DependentFormField, HandlesValidationErrors],
 
-    props: ['resourceName', 'resourceId', 'field'],
-
-
     data() {
         return {
             values: {},
@@ -80,7 +76,11 @@ export default {
 
     computed: {
         locales() {
-            return this.field.locales;
+            if (this.currentField) {
+                return this.currentField.locales ?? [];
+            }
+
+            return this.field.locales ?? [];
         },
         key() {
             return this.field.key;
@@ -192,7 +192,7 @@ export default {
         },
 
         listenToValueChanges(value) {
-            if (this.currentlyIsVisible) {
+            if (this.currentlyIsVisible && this.$refs.theMarkdownEditor) {
                 this.$refs.theMarkdownEditor.setValue(value)
             }
 
@@ -212,6 +212,10 @@ export default {
             mdEditor[0].setValue(this.value[locale] ?? this.currentField.value[locale]);
 
             Nova.$on(`${this.fieldAttributeValueEventName}:${locale}`, this.listenToValueChanges);
+        },
+
+        onSyncedField() {
+            //
         },
 
         async fetchPreviewContent(value) {
