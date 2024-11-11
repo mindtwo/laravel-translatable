@@ -264,10 +264,16 @@ class TranslatableField extends Field
     /**
      * Set the locales for the field.
      *
+     * TODO closure shape
+     *
      * @return $this
      */
-    public function locales(array $locales)
+    public function locales(array|\Closure $locales)
     {
+        if (is_callable($locales)) {
+            $locales = call_user_func($locales);
+        }
+
         $this->locales = $locales;
 
         return $this->withMeta(['locales' => $locales]);
