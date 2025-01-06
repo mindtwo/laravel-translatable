@@ -2,6 +2,8 @@
 
 namespace mindtwo\LaravelTranslatable\Traits;
 
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
+
 trait HasTranslateableFields
 {
     /**
@@ -121,7 +123,7 @@ trait HasTranslateableFields
             return $this->translatableFallback;
         }
 
-        return config('app.fallback_locale');
+        return app(LocaleResolver::class)->resolveFallback();
     }
 
     /**

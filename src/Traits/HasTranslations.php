@@ -40,9 +40,7 @@ trait HasTranslations
      */
     public function setTranslation(string $key, string $value, ?string $locale = null): self
     {
-        if (is_null($locale)) {
-            $locale = app()->getLocale();
-        }
+        $locale = app(LocaleResolver::class)->resolve($locale);
 
         if ($this->hasTranslation($key, $locale)) {
             $this->getTranslation($key, $locale)->update(['text' => $value]);
@@ -100,7 +98,7 @@ trait HasTranslations
                 $join->on($this->getTable().'.'.$keyName, '=', 'translatable.translatable_id')
                     ->where('translatable.translatable_type', self::class)
                     ->where('translatable.key', $key)
-                    ->where('translatable.locale', $locale ?? app()->getLocale());
+                    ->where('translatable.locale', app(LocaleResolver::class)->resolve($locale));
             })
             ->orderBy('translatable.text', $direction);
     }
@@ -117,7 +115,7 @@ trait HasTranslations
                     foreach ($key as $k) {
                         $query->orWhere(function ($query) use ($k, $search, $locale) {
                             $query->where('key', $k)
-                                ->where('locale', $locale ?? app()->getLocale())
+                                ->where('locale', app(LocaleResolver::class)->resolve($locale))
                                 ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
                         });
                     }
@@ -129,7 +127,7 @@ trait HasTranslations
 
         $query->whereHas('translations', function ($query) use ($key, $search, $locale) {
             $query->where('key', $key)
-                ->where('locale', $locale ?? app()->getLocale())
+                ->where('locale', app(LocaleResolver::class)->resolve($locale))
                 ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
         });
     }
