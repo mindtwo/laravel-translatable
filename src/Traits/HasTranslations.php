@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Query\JoinClause;
 use mindtwo\LaravelTranslatable\Models\Translatable;
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
 /**
  * Trait HasTranslations.
@@ -28,13 +29,9 @@ trait HasTranslations
      */
     public function hasTranslation(string $key, ?string $locale = null): bool
     {
-        if (is_null($locale)) {
-            $locale = app()->getLocale();
-        }
-
         return $this->translations()
             ->where('key', $key)
-            ->where('locale', $locale)
+            ->where('locale', app(LocaleResolver::class)->resolve($locale))
             ->exists();
     }
 
@@ -65,14 +62,10 @@ trait HasTranslations
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable
     {
-        if (is_null($locale)) {
-            $locale = app()->getLocale();
-        }
-
         /** @var Translatable $translatable */
         $translatable = $this->translations()
             ->where('key', $key)
-            ->where('locale', $locale)
+            ->where('locale', app(LocaleResolver::class)->resolve($locale))
             ->first();
 
         return $translatable;
@@ -88,7 +81,7 @@ trait HasTranslations
             ->when(! is_null($key), function ($query) use ($key) {
                 $query->where('key', $key);
             })->when(! is_null($locale), function ($query) use ($locale) {
-                $query->where('locale', $locale);
+                $query->where('locale', app(LocaleResolver::class)->resolve($locale));
             })->get();
 
         return $translatableRecords;
