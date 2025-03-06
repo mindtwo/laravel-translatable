@@ -241,3 +241,27 @@ test('scope search by translation', function () {
     expect($searchResults->count())->toBe(2);
     expect($searchResults->pluck('title')->toArray())->toContain('bar', 'baz');
 });
+
+test('expect translations to resolved via loaded relation', function () {
+    $model = TestModelWithTranslations::create();
+
+    $model->translations()->create([
+        'key' => 'title',
+        'locale' => 'en',
+        'text' => 'Test Title',
+    ]);
+
+    // Check if the relation is not loaded but the translation is still resolved
+    expect($model->relationLoaded('translations'))->toBeFalse();
+    expect($model->getTranslation('title', 'en')->text)->toBe('Test Title');
+
+    expect($model->relationLoaded('translations'))->toBeFalse();
+
+    // Load the relation and check if the translation is still resolved even if the relation is loaded
+    $model->load('translations');
+    expect($model->relationLoaded('translations'))->toBeTrue();
+    Translatable::query()->delete();
+
+    expect(Translatable::count())->toBe(0);
+    expect($model->getTranslation('title', 'en')->text)->toBe('Test Title');
+});
