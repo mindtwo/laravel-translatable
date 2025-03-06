@@ -60,6 +60,17 @@ trait HasTranslations
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable
     {
+        // If translations are already loaded, we can use the collection to find the translation.
+        if ($this->relationLoaded('translations') && $this->translations->isNotEmpty()) {
+            /** @var ?Translatable $translatable */
+            $translatable = $this->translations
+                ->where('key', $key)
+                ->where('locale', app(LocaleResolver::class)->resolve($locale))
+                ->first();
+
+            return $translatable;
+        }
+
         /** @var ?Translatable $translatable */
         $translatable = $this->translations()
             ->where('key', $key)
