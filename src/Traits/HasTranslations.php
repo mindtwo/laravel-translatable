@@ -60,7 +60,7 @@ trait HasTranslations
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable
     {
-        /** @var Translatable $translatable */
+        /** @var ?Translatable $translatable */
         $translatable = $this->translations()
             ->where('key', $key)
             ->where('locale', app(LocaleResolver::class)->resolve($locale))
