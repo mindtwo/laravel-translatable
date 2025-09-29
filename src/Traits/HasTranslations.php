@@ -12,8 +12,33 @@ use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
 /**
  * Trait HasTranslations.
  *
- * @method static \Illuminate\Database\Eloquent\Builder searchByTranslation(string|array $key, string $search, ?string $locale = null)
- * @method static \Illuminate\Database\Eloquent\Builder withOutTranslations()
+ * This trait provides translation functionality for Eloquent models. It automatically
+ * overrides specified model attributes with their translated values based on the current
+ * locale and configured fallback chain.
+ *
+ * Query Scope Methods (added by TranslatableScope):
+ * @method static \Illuminate\Database\Eloquent\Builder withoutTranslations() Remove translation overrides and get base table values
+ * @method static \Illuminate\Database\Eloquent\Builder orderByTranslation(string $key, ?string $locale = null, string $direction = 'asc') Order results by translated field value
+ * @method static \Illuminate\Database\Eloquent\Builder searchByTranslation(string|array $key, string $search, ?string $locale = null, string $operator = 'like') Search in translated fields with locale fallback support
+ * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationExact(string|array $key, string $search, ?string $locale = null) Search for exact matches in translated fields
+ * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationStartsWith(string|array $key, string $search, ?string $locale = null) Search for translated fields that start with the given text
+ * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationEndsWith(string|array $key, string $search, ?string $locale = null) Search for translated fields that end with the given text
+ *
+ * Required Implementation:
+ * Models using this trait must implement the translatedKeys() method that returns an array
+ * of column names that should be translatable.
+ *
+ * Example:
+ * ```php
+ * public static function translatedKeys(): array
+ * {
+ *     return ['title', 'description'];
+ * }
+ * ```
+ *
+ * Optional Fallback Configuration:
+ * Models can customize their fallback locale chain by implementing getTranslatableFallback()
+ * method or defining a $translatableFallback property.
  *
  * @phpstan-ignore-next-line
  */
@@ -47,6 +72,11 @@ trait HasTranslations
                 'locale' => $locale,
                 'key' => $key,
             ])
+            ->when(
+                is_array($locale),
+                fn ($query) => $query->whereIn('locale', $locale),
+                fn ($query) => $query->where('locale', $locale)
+            )
             ->exists();
     }
 
@@ -75,47 +105,82 @@ trait HasTranslations
      */
     public function getTranslation(string $key, ?string $locale = null): ?Translatable
     {
-        // Get the locale
-        $locale = $locale ?? $this->getFallbackTranslationLocale($locale);
+        // Build locale priority array once
+        $currentLocale = $locale ?? app()->getLocale();
         $fallbackLocale = $this->getFallbackTranslationLocale();
 
-        // Merge locale and fallback
-        $locale = collect([$locale])
-            ->when($fallbackLocale !== $locale, function ($collection) use ($fallbackLocale) {
-                return $collection->push($fallbackLocale);
-            });
+        // Build priority array efficiently
+        $localePriority = [$currentLocale];
+        if (is_array($fallbackLocale)) {
+            $localePriority = array_merge($localePriority, $fallbackLocale);
+        } elseif ($fallbackLocale !== $currentLocale) {
+            $localePriority[] = $fallbackLocale;
+        }
 
-        // Get the translatable records by priority
-        $subQuery = $this->buildLocalePriorityQuery($locale->all())
-            ->where('key', $key);
+        // Remove duplicates while preserving order
+        $localePriority = array_values(array_unique($localePriority));
 
+        // Use a simpler query with ORDER BY instead of window functions
         /** @var ?Translatable $translatable */
         $translatable = $this->translations()
-            ->whereIn('id', function ($query) use ($subQuery) {
-                $query->fromSub($subQuery, 'ranked')
-                    ->where('rn', 1)
-                    ->select('id');
-            })
+            ->where('key', $key)
+            ->whereIn('locale', $localePriority)
+            ->orderByRaw($this->buildLocaleOrderExpression($localePriority))
+            ->orderBy('id', 'desc') // Tie-breaker for same locale
             ->first();
 
         return $translatable;
     }
 
     /**
+     * Build ORDER BY expression for locale priority without using window functions.
+     */
+    private function buildLocaleOrderExpression(array $localePriority): string
+    {
+        $cases = [];
+        foreach ($localePriority as $index => $locale) {
+            if (is_null($locale)) {
+                $cases[] = 'WHEN locale IS NULL THEN '.($index + 1);
+            } else {
+                $cases[] = 'WHEN locale = '.DB::connection()->getPdo()->quote($locale).' THEN '.($index + 1);
+            }
+        }
+
+        return 'CASE '.implode(' ', $cases).' ELSE '.(count($localePriority) + 1).' END';
+    }
+
+    /**
      * Get all or filtered translations for the model as collection.
+     * When locale is specified, includes fallback locales for better coverage.
      */
     public function getTranslations(?string $key = null, ?string $locale = null): Collection
     {
-        /** @var Collection<Translatable> $translatableRecords */
-        $translatableRecords = $this->translations()
-            ->when(! is_null($locale), function ($query) use ($locale) {
-                $query->where('locale', app(LocaleResolver::class)->resolve($locale));
-            })
-            ->when(! is_null($key), function ($query) use ($key) {
-                $query->where('key', $key);
-            })->get();
+        $query = $this->translations();
 
-        return $translatableRecords;
+        // Apply key filter first (most selective)
+        if (! is_null($key)) {
+            $query->where('key', $key);
+        }
+
+        // Apply locale filter with fallback support
+        if (! is_null($locale)) {
+            $resolvedLocale = app(LocaleResolver::class)->resolve($locale);
+            $fallbackLocale = $this->getFallbackTranslationLocale();
+
+            // Build locale list including fallbacks
+            $locales = [$resolvedLocale];
+            if (is_array($fallbackLocale)) {
+                $locales = array_merge($locales, $fallbackLocale);
+            } elseif ($fallbackLocale !== $resolvedLocale) {
+                $locales[] = $fallbackLocale;
+            }
+
+            // Use whereIn for better performance with multiple locales
+            $query->whereIn('locale', array_unique($locales));
+        }
+
+        /** @var Collection<Translatable> $translatableRecords */
+        return $query->get();
     }
 
     /**
@@ -130,7 +195,7 @@ trait HasTranslations
     /**
      * Get the fallback translation locale.
      */
-    public function getFallbackTranslationLocale(?string $locale = null): string
+    public function getFallbackTranslationLocale(?string $locale = null): string|array
     {
         // Get the fallback locale from the model via method
         if (method_exists($this, 'getTranslatableFallback')) {
@@ -143,39 +208,5 @@ trait HasTranslations
         }
 
         return app(LocaleResolver::class)->resolveFallback($locale);
-    }
-
-    /**
-     * Build a query to rank certificates based on locale priority.
-     * This method constructs a subquery that ranks certificates based on the user's locale preferences.
-     * It uses a CASE WHEN expression to assign ranks based on the locale.
-     *
-     * @param  string[]  $localePriority
-     */
-    protected function buildLocalePriorityQuery(array $localePriority): \Illuminate\Database\Query\Builder
-    {
-        // Build CASE WHEN expression
-        $caseParts = [];
-        $params = [];
-
-        foreach ($localePriority as $index => $locale) {
-            if (is_null($locale)) {
-                $caseParts[] = 'WHEN locale IS NULL THEN '.($index + 1);
-            } else {
-                $caseParts[] = 'WHEN locale = ? THEN '.($index + 1);
-                $params[] = $locale;
-            }
-        }
-
-        $caseSql = 'CASE '.implode(' ', $caseParts).' ELSE '.(count($localePriority) + 1).' END';
-
-        // Create Sub query
-        return DB::table('translatable')
-            ->select('id')
-            ->selectRaw("ROW_NUMBER() OVER (
-                PARTITION BY translatable_id, translatable_type, key
-                ORDER BY {$caseSql}, id DESC
-            ) as rn", $params)
-            ->whereIn('locale', $localePriority);
     }
 }

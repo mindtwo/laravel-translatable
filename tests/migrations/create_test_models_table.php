@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('test_models', function (Blueprint $table) {
             $table->id();
             $table->string('title')->nullable();
+            $table->text('description')->nullable();
             $table->string('name')->nullable();
             $table->integer('priority')->default(0);
             $table->timestamps();

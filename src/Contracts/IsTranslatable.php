@@ -14,6 +14,12 @@ interface IsTranslatable
     public function translations(): MorphMany;
 
     /**
+     * Get the translated keys for the model.
+     * This method should return an array of keys that are translatable.
+     */
+    public function translatedKeys(): array;
+
+    /**
      * Check if the model has a translation for the given locale.
      * If locale is null, it should check for the default locale.
      */

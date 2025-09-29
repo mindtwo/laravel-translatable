@@ -12,9 +12,13 @@ The `mindtwo/laravel-translatable` package provides a simple and effective way t
 
 ## Features
 
-- Easy integration with Eloquent models.
-- Seamless translation of model attributes.
-- Simple configuration and usage.
+- ✅ **Automatic Translation Override**: Translated fields automatically override base model attributes
+- ✅ **Fallback Locale Chains**: Sophisticated fallback system (e.g., `fr` → `de` → `en`)
+- ✅ **Query Scope Methods**: Search, filter, and order by translated content
+- ✅ **Performance Optimized**: Efficient database queries with proper indexing
+- ✅ **IDE Autocomplete**: Full PHPDoc support for all methods
+- ✅ **Flexible Configuration**: Global and per-model locale chain configuration
+- ✅ **Laravel Integration**: Works seamlessly with Eloquent relationships and collections
 
 ## Installation
 
@@ -42,79 +46,242 @@ This is the contents of the published config file:
 ```php
 <?php
 
-use mindtwo\LaravelTranslatable\Models\Translatable;
-
 return [
-    'model' => Translatable::class,
+    /*
+    |--------------------------------------------------------------------------
+    | Translatable Model
+    |--------------------------------------------------------------------------
+    |
+    | The model class to use for storing translations.
+    |
+    */
+    'model' => \mindtwo\LaravelTranslatable\Models\Translatable::class,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Locale Chain
+    |--------------------------------------------------------------------------
+    |
+    | Define a default fallback locale chain for all translatable models.
+    | When a translation is not found in the current locale, the system will
+    | try each locale in this chain until a translation is found.
+    |
+    | Example: ['de', 'en', 'fr'] means:
+    | Current Locale → German → English → French → Base Table Value
+    |
+    */
+    'locale_chain' => [
+        // 'de', // German as primary fallback
+        // 'en', // English as secondary fallback
+        // 'fr', // French as tertiary fallback
+    ],
 ];
 ```
 
 
-## Setup
-After installation, you need to publish and run the migrations:
+## Quick Start
 
-```bash
-php artisan vendor:publish --provider="mindtwo\LaravelTranslatable\TranslatableServiceProvider"
-php artisan migrate
+### 1. Create a Translatable Model
+
+```php
+<?php
+
+use Illuminate\Database\Eloquent\Model;
+use mindtwo\LaravelTranslatable\Traits\HasTranslations;
+use mindtwo\LaravelTranslatable\Contracts\IsTranslatable;
+
+class Product extends Model implements IsTranslatable
+{
+    use HasTranslations;
+
+    protected $fillable = ['title', 'description', 'price'];
+
+    /**
+     * Define which fields are translatable
+     */
+    public static function translatedKeys(): array
+    {
+        return ['title', 'description'];
+    }
+
+    /**
+     * Optional: Custom fallback locale chain for this model
+     */
+    public function getTranslatableFallback(): array
+    {
+        return ['de', 'en', 'fr']; // German → English → French
+    }
+}
 ```
 
-This will create a `translatable` table in your database.
+### 2. Add Translations
 
-## Usage
+```php
+$product = Product::create([
+    'title' => 'Default Title',
+    'description' => 'Default Description',
+    'price' => 99.99
+]);
 
-### Creating Translatable Models
-1. **Migration**: Use the provided `create_translatable_table.php` migration to set up the `translatable` table.
+// Add translations
+$product->setTranslation('title', 'English Product', 'en');
+$product->setTranslation('title', 'Deutsches Produkt', 'de');
+$product->setTranslation('title', 'Produit Français', 'fr');
 
-2. **Model Trait**: Include the `HasTranslations` trait in your model. This trait provides methods to interact with translations.
+$product->setTranslation('description', 'English Description', 'en');
+$product->setTranslation('description', 'Deutsche Beschreibung', 'de');
+```
 
-    ```php
-    use mindtwo\LaravelTranslatable\Traits\HasTranslations;
+### 3. Automatic Translation Override
 
-    class YourModel extends Model
+```php
+// Set application locale
+app()->setLocale('de');
+
+$product = Product::first();
+echo $product->title; // "Deutsches Produkt" (automatically translated!)
+echo $product->description; // "Deutsche Beschreibung"
+echo $product->price; // 99.99 (non-translated field remains unchanged)
+
+// Get original value if needed
+echo $product->getUntranslated('title'); // "Default Title"
+```
+
+## Advanced Usage
+
+### Query Scope Methods
+
+All scope methods support IDE autocomplete and have full parameter type hints:
+
+```php
+// Search in translated fields (with fallback locale support)
+$products = Product::searchByTranslation('title', 'Product')->get();
+
+// Exact match search
+$exact = Product::searchByTranslationExact('title', 'Deutsches Produkt')->get();
+
+// Prefix/suffix search
+$startsWith = Product::searchByTranslationStartsWith('title', 'German')->get();
+$endsWith = Product::searchByTranslationEndsWith('description', 'warranty')->get();
+
+// Multiple field search
+$multiField = Product::searchByTranslation(['title', 'description'], 'search term')->get();
+
+// Order by translated field
+$sorted = Product::orderByTranslation('title', 'en', 'asc')->get();
+
+// Get base table values (without translations)
+$baseProducts = Product::withoutTranslations()->get();
+
+// Method chaining works perfectly
+$results = Product::searchByTranslationStartsWith('title', 'Premium')
+    ->orderByTranslation('title')
+    ->limit(10)
+    ->get();
+```
+
+### Fallback Locale Chains
+
+#### Global Configuration
+
+Configure a default fallback chain in your `config/translatable.php`:
+
+```php
+'locale_chain' => ['de', 'en', 'fr']
+```
+
+This creates the fallback order: **Current Locale** → **German** → **English** → **French** → **Base Table Value**
+
+#### Model-Specific Configuration
+
+Override the global chain for specific models:
+
+```php
+class Product extends Model implements IsTranslatable
+{
+    use HasTranslations;
+
+    // Method approach
+    public function getTranslatableFallback(): array
     {
-        use HasTranslations;
-
-        // Model content
+        return ['es', 'en']; // Spanish → English for this model
     }
-    ```
 
-3. **Translatable Model**: The `Translatable` model is used to store translations. It uses the `AutoCreateUuid` trait for unique identification.
+    // Or property approach
+    protected $translatableFallback = ['es', 'en'];
+}
+```
 
-    ```php
-    use mindtwo\LaravelTranslatable\Models\Translatable;
+### Working with Translation Data
 
-    // Usage within your application logic
-    ```
+```php
+// Check if translation exists
+if ($product->hasTranslation('title', 'de')) {
+    echo "German translation available";
+}
 
-### Working with Translations
-- **Add a Translation**:
-    ```php
-    $yourModelInstance->translations()->create([
-        'key' => 'your_key',
-        'locale' => 'en',
-        'text' => 'Your translation text'
-    ]);
-    ```
+// Get specific translation object
+$translation = $product->getTranslation('title', 'de');
+echo $translation->text; // "Deutsches Produkt"
 
-- **Check for a Translation**:
-    ```php
-    $exists = $yourModelInstance->hasTranslation('your_key', 'en');
-    ```
+// Get all translations for a key
+$titleTranslations = $product->getTranslations('title');
 
-- **Get a Translation**:
-    ```php
-    $translation = $yourModelInstance->getTranslation('your_key', 'en');
-    ```
+// Get all translations for a locale
+$germanTranslations = $product->getTranslations(null, 'de');
 
-- **Retrieve All Translations**:
-    ```php
-    $translations = $yourModelInstance->getTranslations();
-    ```
+// Get all translations
+$allTranslations = $product->getTranslations();
+```
 
-## Best Practices
-- Always check if a translation exists before attempting to retrieve it.
-- Use consistent keys across different models to maintain clarity.
-- Regularly back up your translations as they are stored in the database.
+### Performance Features
+
+- **Automatic Query Optimization**: Efficient subqueries with proper locale priority
+- **Index-Friendly Queries**: Uses `whereIn()` for better database performance
+- **Fallback Chain Caching**: Locale priorities calculated once per query
+- **Smart Column Selection**: Only translated fields are overridden
+
+## Configuration Examples
+
+### E-commerce Setup
+```php
+// config/translatable.php
+'locale_chain' => ['de', 'en', 'fr', 'es']
+
+// Product.php
+public function getTranslatableFallback(): array
+{
+    return ['en', 'de']; // Products: English → German
+}
+
+// Category.php
+public function getTranslatableFallback(): array
+{
+    return ['de', 'en', 'fr']; // Categories: German → English → French
+}
+```
+
+### Multi-Region Content
+```php
+// config/translatable.php
+'locale_chain' => ['en', 'fr', 'de']
+
+// Article.php
+public static function translatedKeys(): array
+{
+    return ['title', 'content', 'excerpt', 'meta_description'];
+}
+```
+
+## IDE Support
+
+The package includes comprehensive PHPDoc annotations for full IDE support:
+
+- ✅ **Autocomplete** for all scope methods
+- ✅ **Parameter hints** with proper types (`string|array`, `?string`)
+- ✅ **Return type information** for method chaining
+- ✅ **Inline documentation** on method hover
+- ✅ **Static analysis support** (PHPStan compatible)
 
 
 ## Testing

@@ -4,10 +4,31 @@ namespace mindtwo\LaravelTranslatable\Scopes;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use mindtwo\LaravelTranslatable\Contracts\IsTranslatable;
 use mindtwo\LaravelTranslatable\Models\Translatable;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
+/**
+ * TranslatableScope provides automatic translation functionality for Eloquent models.
+ *
+ * This scope automatically:
+ * - Joins translation tables for models with translatedKeys()
+ * - Overrides specified columns with their translated values using COALESCE
+ * - Supports locale fallback chains for missing translations
+ * - Adds query builder macros for translation-specific operations
+ *
+ * Applied automatically when using the HasTranslations trait.
+ *
+ * Added Query Builder Methods:
+ * - withoutTranslations(): Remove translation overrides
+ * - orderByTranslation(): Order by translated field values
+ * - searchByTranslation(): Search in translated fields with fallback support
+ * - searchByTranslationExact(): Exact match search in translations
+ * - searchByTranslationStartsWith(): Prefix search in translations
+ * - searchByTranslationEndsWith(): Suffix search in translations
+ *
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ */
 class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 {
     /**
@@ -24,22 +45,35 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
      */
     public function apply($builder, $model)
     {
-        try {
-            // Check if the model has the translatedKeys method defined
-            $keys = $model::translatedKeys();
-        } catch (\Throwable $e) {
-            Log::error('Failed to get translated keys for model: '.static::class, [
-                'exception' => $e,
-            ]);
+        if (! $model instanceof IsTranslatable) {
+            // If the model does not implement IsTranslatable, we skip the scope
+            return;
+        }
 
-            // If the keys method is not defined, we assume no translations are needed.
+        $keys = $model->translatedKeys();
+        if (empty($keys)) {
+            // If there are no translatable keys, we skip the scope
             return;
         }
 
         // Get the model and its table
         $model = $builder->getModel();
         $table = $model->getTable();
-        $locale = app()->getLocale();
+
+        // Get the current locale
+        $currentLocale = app()->getLocale();
+
+        // Get fallback locale chain from the model
+        $fallbackLocale = $model->getFallbackTranslationLocale();
+
+        // Build locale priority array: current locale first, then fallbacks
+        $localePriority = collect([$currentLocale]);
+        if (is_array($fallbackLocale)) {
+            $localePriority = $localePriority->merge($fallbackLocale);
+        } elseif ($fallbackLocale !== $currentLocale) {
+            $localePriority->push($fallbackLocale);
+        }
+        $localePriority = $localePriority->unique()->values()->toArray();
 
         $translatableModel = config('translatable.model', Translatable::class);
         $translatableTable = (new $translatableModel)->getTable();
@@ -59,27 +93,43 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             $builder->select($baseColumns);
         }
 
-        // Join only once; we'll filter by key in the ON clause to avoid row duplication.
-        // If you add more fields, duplicate the join under a different alias per field.
+        // Join only once per key, using a subquery to get the best translation based on locale priority
         foreach ($keys as $key) {
-            $alias = 't_i18n_'.$key;
+            // Build the locale priority subquery similar to buildLocalePriorityQuery
+            $caseParts = [];
+            $params = [];
 
-            $builder->leftJoin("{$translatableTable} as {$alias}", function ($join) use ($alias, $table, $model, $locale, $key) {
-                $join->on("{$alias}.translatable_id", '=', "{$table}.{$model->getKeyName()}")
-                    ->where("{$alias}.translatable_type", '=', $model->getMorphClass())
-                    ->where("{$alias}.key", '=', $key)
-                    ->where("{$alias}.locale", '=', $locale);
-            });
+            foreach ($localePriority as $index => $locale) {
+                if (is_null($locale)) {
+                    $caseParts[] = 'WHEN locale IS NULL THEN '.($index + 1);
+                } else {
+                    $caseParts[] = 'WHEN locale = ? THEN '.($index + 1);
+                    $params[] = $locale;
+                }
+            }
 
-            // Add the COALESCE column and backup column using addSelect
-            // The COALESCE column with same name will override the base table column for result access
+            $caseSql = 'CASE '.implode(' ', $caseParts).' ELSE '.(count($localePriority) + 1).' END';
+
+            // Create a subquery that gets the best translation for this key based on locale priority
+            $subQuery = DB::table($translatableTable)
+                ->select('text')
+                ->whereColumn('translatable_id', "{$table}.{$model->getKeyName()}")
+                ->where('translatable_type', $model->getMorphClass())
+                ->where('key', $key)
+                ->whereIn('locale', $localePriority)
+                ->orderByRaw($caseSql, $params)
+                ->orderBy('id', 'desc')
+                ->limit(1);
+
+            // Add the subquery result and backup column using addSelect
+            // We need to merge the bindings manually since DB::raw doesn't support mergeBindings
             $builder->addSelect([
-                DB::raw("COALESCE({$alias}.text, {$table}.{$key}) as {$key}"),
+                DB::raw("COALESCE(({$subQuery->toSql()}), {$table}.{$key}) as {$key}"),
                 DB::raw("{$table}.{$key} as _base_{$key}"),
             ]);
 
-            // For ordering to work correctly, we need to ensure ORDER BY uses the COALESCE result
-            // This is achieved by the COALESCE column appearing later in SELECT and having same alias
+            // Add the subquery bindings to the main query
+            $builder->addBinding($subQuery->getBindings(), 'select');
         }
     }
 
@@ -111,26 +161,68 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
      */
     protected function addSearchByTranslation(Builder $builder)
     {
-        $builder->macro('searchByTranslation', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+        $builder->macro('searchByTranslation', function (
+            Builder $builder,
+            string|array $key,
+            string $search,
+            ?string $locale = null,
+            string $operator = 'like'
+        ) {
+            // Get the model to access fallback locale configuration
+            $model = $builder->getModel();
+
+            // Build locale priority list including fallbacks
+            $currentLocale = $locale ? app(LocaleResolver::class)->resolve($locale) : app()->getLocale();
+            $fallbackLocale = $model->getFallbackTranslationLocale();
+
+            $localePriority = [$currentLocale];
+            if (is_array($fallbackLocale)) {
+                $localePriority = array_merge($localePriority, $fallbackLocale);
+            } elseif ($fallbackLocale !== $currentLocale) {
+                $localePriority[] = $fallbackLocale;
+            }
+            $localePriority = array_unique($localePriority);
+
+            // Prepare search value based on operator
+            $searchValue = match($operator) {
+                'like' => "%{$search}%",
+                'starts_with' => "{$search}%",
+                'ends_with' => "%{$search}",
+                'exact' => $search,
+                default => "%{$search}%"
+            };
+
+            // Use standard LIKE operator (case sensitivity depends on database collation)
+            $comparison = 'like';
+
             if (is_array($key)) {
-                return $builder->whereHas('translations', function ($query) use ($key, $search, $locale) {
-                    $query->where(function ($query) use ($key, $search, $locale) {
-                        foreach ($key as $k) {
-                            $query->orWhere(function ($query) use ($k, $search, $locale) {
-                                $query->where('key', $k)
-                                    ->where('locale', app(LocaleResolver::class)->resolve($locale))
-                                    ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
-                            });
-                        }
-                    });
+                // Multiple keys search with locale fallback
+                return $builder->whereHas('translations', function ($query) use ($key, $searchValue, $localePriority, $comparison) {
+                    $query->whereIn('locale', $localePriority)
+                        ->whereIn('key', $key)
+                        ->where('text', $comparison, $searchValue);
                 });
             }
 
-            return $builder->whereHas('translations', function ($query) use ($key, $search, $locale) {
+            // Single key search with locale fallback
+            return $builder->whereHas('translations', function ($query) use ($key, $searchValue, $localePriority, $comparison) {
                 $query->where('key', $key)
-                    ->where('locale', app(LocaleResolver::class)->resolve($locale))
-                    ->where(fn ($q) => $q->where('text', 'like', "%{$search}%")->orWhere('text', 'like', "%{$search}"));
+                    ->whereIn('locale', $localePriority)
+                    ->where('text', $comparison, $searchValue);
             });
+        });
+
+        // Add convenience macros for common search patterns
+        $builder->macro('searchByTranslationExact', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            return $builder->searchByTranslation($key, $search, $locale, 'exact');
+        });
+
+        $builder->macro('searchByTranslationStartsWith', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            return $builder->searchByTranslation($key, $search, $locale, 'starts_with');
+        });
+
+        $builder->macro('searchByTranslationEndsWith', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            return $builder->searchByTranslation($key, $search, $locale, 'ends_with');
         });
     }
 }
