@@ -57,7 +57,6 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
         }
 
         // Get the model and its table
-        $model = $builder->getModel();
         $table = $model->getTable();
 
         // Get the current locale
@@ -173,6 +172,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 
             // Build locale priority list including fallbacks
             $currentLocale = $locale ? app(LocaleResolver::class)->resolve($locale) : app()->getLocale();
+            // @phpstan-ignore-next-line
             $fallbackLocale = $model->getFallbackTranslationLocale();
 
             $localePriority = [$currentLocale];
@@ -214,14 +214,17 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 
         // Add convenience macros for common search patterns
         $builder->macro('searchByTranslationExact', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            // @phpstan-ignore-next-line
             return $builder->searchByTranslation($key, $search, $locale, 'exact');
         });
 
         $builder->macro('searchByTranslationStartsWith', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            // @phpstan-ignore-next-line
             return $builder->searchByTranslation($key, $search, $locale, 'starts_with');
         });
 
         $builder->macro('searchByTranslationEndsWith', function (Builder $builder, string|array $key, string $search, ?string $locale = null) {
+            // @phpstan-ignore-next-line
             return $builder->searchByTranslation($key, $search, $locale, 'ends_with');
         });
     }
