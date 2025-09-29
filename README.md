@@ -273,6 +273,54 @@ public static function translatedKeys(): array
 }
 ```
 
+## API Reference
+
+### Instance Methods
+
+| Method | Description | Parameters |
+|--------|-------------|------------|
+| `setTranslation($key, $value, $locale)` | Set translation for a field | `string $key`, `string $value`, `?string $locale` |
+| `getTranslation($key, $locale)` | Get translation object | `string $key`, `?string $locale` |
+| `getTranslations($key, $locale)` | Get translation collection | `?string $key`, `?string $locale` |
+| `hasTranslation($key, $locale)` | Check if translation exists | `string $key`, `?string $locale` |
+| `getUntranslated($key)` | Get original table value | `string $key` |
+| `translations()` | Get translations relationship | - |
+
+### Query Scope Methods (Static)
+
+| Method | Description | Parameters |
+|--------|-------------|------------|
+| `withoutTranslations()` | Disable translation overrides | - |
+| `orderByTranslation($key, $locale, $direction)` | Order by translated field | `string $key`, `?string $locale`, `string $direction` |
+| `searchByTranslation($key, $search, $locale, $operator)` | Search in translations | `string\|array $key`, `string $search`, `?string $locale`, `string $operator` |
+| `searchByTranslationExact($key, $search, $locale)` | Exact match search | `string\|array $key`, `string $search`, `?string $locale` |
+| `searchByTranslationStartsWith($key, $search, $locale)` | Prefix search | `string\|array $key`, `string $search`, `?string $locale` |
+| `searchByTranslationEndsWith($key, $search, $locale)` | Suffix search | `string\|array $key`, `string $search`, `?string $locale` |
+
+### Required Implementation
+
+Models using `HasTranslations` must implement:
+
+```php
+public static function translatedKeys(): array
+{
+    return ['field1', 'field2']; // Array of translatable column names
+}
+```
+
+### Optional Configuration Methods
+
+```php
+// Method approach - returns array of fallback locales
+public function getTranslatableFallback(): array
+{
+    return ['de', 'en', 'fr'];
+}
+
+// Property approach - same functionality
+protected $translatableFallback = ['de', 'en', 'fr'];
+```
+
 ## IDE Support
 
 The package includes comprehensive PHPDoc annotations for full IDE support:
