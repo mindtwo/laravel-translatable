@@ -184,7 +184,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             $localePriority = array_unique($localePriority);
 
             // Prepare search value based on operator
-            $searchValue = match($operator) {
+            $searchValue = match ($operator) {
                 'like' => "%{$search}%",
                 'starts_with' => "{$search}%",
                 'ends_with' => "%{$search}",

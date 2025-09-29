@@ -17,6 +17,7 @@ use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
  * locale and configured fallback chain.
  *
  * Query Scope Methods (added by TranslatableScope):
+ *
  * @method static \Illuminate\Database\Eloquent\Builder withoutTranslations() Remove translation overrides and get base table values
  * @method static \Illuminate\Database\Eloquent\Builder orderByTranslation(string $key, ?string $locale = null, string $direction = 'asc') Order results by translated field value
  * @method static \Illuminate\Database\Eloquent\Builder searchByTranslation(string|array $key, string $search, ?string $locale = null, string $operator = 'like') Search in translated fields with locale fallback support

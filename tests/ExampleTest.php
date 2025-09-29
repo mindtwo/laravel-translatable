@@ -490,7 +490,7 @@ test('improved searchByTranslation with fallback locales and operators', functio
 
     $model3 = TestModel::create();
     $model3->translations()->create([
-        'key' => 'title', 'locale' => 'fr', 'text' => 'Produit Français'
+        'key' => 'title', 'locale' => 'fr', 'text' => 'Produit Français',
     ]);
 
     // Test 1: Basic search with fallback locale support
