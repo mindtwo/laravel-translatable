@@ -8,3 +8,11 @@ parameters:
         - config
         - database
     tmpDir: build/phpstan
+
+    ignoreErrors:
+        - identifier: method.notFound
+          paths:
+            - %currentWorkingDirectory%/src/Scopes
+
+        - identifier: argument.type
+          message: '#Parameter \#1 \$relations of method Illuminate\\Database\\Eloquent\\Builder.*::with\(\) expects#'

@@ -24,4 +24,16 @@ class LocaleResolver
 
         return $this;
     }
+
+    /**
+     * Normalize locale parameter to array format.
+     */
+    public function normalizeLocales(string|array|null $locales): array
+    {
+        if (is_null($locales)) {
+            return $this->getLocales();
+        }
+
+        return is_array($locales) ? $locales : [$locales];
+    }
 }

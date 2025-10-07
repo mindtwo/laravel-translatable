@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use mindtwo\LaravelTranslatable\Models\Translatable;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
+use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
 
 /**
  * Trait HasTranslations
@@ -23,7 +24,10 @@ use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
  * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that start with the given text
  * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that end with the given text
  * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null) Filter models that have a translation for the given key and locale(s)
- * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null) Filter models where translation matches a specific value
+ * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact') Filter models where translation matches a specific value
+ * @method static Builder<static>|static orderByTranslation(string $key, string $direction = 'asc') Order by translated field values
+ *
+ * @phpstan-ignore trait.unused
  */
 trait HasTranslations
 {
@@ -46,6 +50,10 @@ trait HasTranslations
      */
     protected static function bootHasTranslations(): void
     {
+
+        // Register the TranslatableScope automatically
+        static::addGlobalScope(new TranslatableScope);
+
         static::retrieved(function ($model) {
             $model->indexTranslations();
         });
@@ -56,11 +64,16 @@ trait HasTranslations
      */
     public function getTranslation(string $key, string|array|null $locales = null): mixed
     {
+        $locales = $this->getResolvedLocales($locales);
+
+        if (count($locales) === 0) {
+            // No locales specified, return default attribute value
+            return parent::getAttribute($key);
+        }
+
         if ($this->translationsMap === null) {
             $this->indexTranslations();
         }
-
-        $locales = $this->getResolvedLocales($locales);
 
         foreach ($locales as $locale) {
             $this->ensureLocaleLoaded($locale);
@@ -147,119 +160,6 @@ trait HasTranslations
         }
 
         return $value;
-    }
-
-    /**
-     * Eager load translations for specified locales.
-     */
-    public function scopeWithTranslations(Builder $query, ?array $locales = null): void
-    {
-        $locales = $locales ?? resolve(LocaleResolver::class)->getLocales();
-
-        $query->with([
-            'translations' => fn (Builder $q) => $q->whereIn('locale', $locales),
-        ]);
-    }
-
-    /**
-     * Search for models by translated field value with locale fallback support.
-     */
-    public function scopeSearchByTranslation(
-        Builder $query,
-        string|array $key,
-        string $search,
-        string|array|null $locales = null,
-        string $operator = 'like'
-    ): void {
-        $localePriority = $this->normalizeLocales($locales);
-
-        $searchValue = match ($operator) {
-            'like' => "%{$search}%",
-            'starts_with' => "{$search}%",
-            'ends_with' => "%{$search}",
-            'exact' => $search,
-            default => "%{$search}%"
-        };
-
-        $comparison = $operator === 'exact' ? '=' : 'like';
-
-        if (is_array($key)) {
-            $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
-                $q->whereIn('locale', $localePriority)
-                    ->whereIn('key', $key)
-                    ->where('text', $comparison, $searchValue);
-            });
-        } else {
-            $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
-                $q->where('key', $key)
-                    ->whereIn('locale', $localePriority)
-                    ->where('text', $comparison, $searchValue);
-            });
-        }
-    }
-
-    /**
-     * Search for exact matches in translated fields.
-     */
-    public function scopeSearchByTranslationExact(
-        Builder $query,
-        string|array $key,
-        string $search,
-        string|array|null $locales = null
-    ): void {
-        $query->searchByTranslation($key, $search, $locales, 'exact');
-    }
-
-    /**
-     * Search for translated fields that start with the given text.
-     */
-    public function scopeSearchByTranslationStartsWith(
-        Builder $query,
-        string|array $key,
-        string $search,
-        string|array|null $locales = null
-    ): void {
-        $query->searchByTranslation($key, $search, $locales, 'starts_with');
-    }
-
-    /**
-     * Search for translated fields that end with the given text.
-     */
-    public function scopeSearchByTranslationEndsWith(
-        Builder $query,
-        string|array $key,
-        string $search,
-        string|array|null $locales = null
-    ): void {
-        $query->searchByTranslation($key, $search, $locales, 'ends_with');
-    }
-
-    /**
-     * Filter models that have a translation for the given key and locale(s).
-     */
-    public function scopeWhereHasTranslation(
-        Builder $query,
-        string $key,
-        string|array|null $locales = null
-    ): void {
-        $localePriority = $this->normalizeLocales($locales);
-
-        $query->whereHas('translations', function ($q) use ($key, $localePriority) {
-            $q->where('key', $key)
-                ->whereIn('locale', $localePriority);
-        });
-    }
-
-    /**
-     * Filter models where translation matches a specific value.
-     */
-    public function scopeWhereTranslation(
-        Builder $query,
-        string $key,
-        string $value,
-        string|array|null $locales = null
-    ): void {
-        $query->searchByTranslationExact($key, $value, $locales);
     }
 
     /**
@@ -360,17 +260,5 @@ trait HasTranslations
         if ($this->relationLoaded('translations')) {
             $this->setRelation('translations', $this->translations->merge($translations));
         }
-    }
-
-    /**
-     * Normalize locale parameter to array format.
-     */
-    protected function normalizeLocales(string|array|null $locales): array
-    {
-        if (is_null($locales)) {
-            return resolve(LocaleResolver::class)->getLocales();
-        }
-
-        return is_array($locales) ? $locales : [$locales];
     }
 }
