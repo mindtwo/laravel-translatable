@@ -2,56 +2,34 @@
 
 namespace mindtwo\LaravelTranslatable\Traits;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Support\Facades\DB;
 use mindtwo\LaravelTranslatable\Models\Translatable;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
-use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
 
 /**
- * Trait HasTranslations.
+ * Trait HasTranslations
  *
- * This trait provides translation functionality for Eloquent models. It automatically
- * overrides specified model attributes with their translated values based on the current
- * locale and configured fallback chain.
+ * Provides translation functionality for Eloquent models using eager loading and optimized
+ * attribute access. Supports locale fallback chains and automatic attribute translation.
  *
- * Query Scope Methods (added by TranslatableScope):
+ * @property-read Collection<int, Translatable> $translations
+ * @property-read int|null $translations_count
  *
- * @method static \Illuminate\Database\Eloquent\Builder withoutTranslations() Remove translation overrides and get base table values
- * @method static \Illuminate\Database\Eloquent\Builder orderByTranslation(string $key, ?string $locale = null, string $direction = 'asc') Order results by translated field value
- * @method static \Illuminate\Database\Eloquent\Builder searchByTranslation(string|array $key, string $search, ?string $locale = null, string $operator = 'like') Search in translated fields with locale fallback support
- * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationExact(string|array $key, string $search, ?string $locale = null) Search for exact matches in translated fields
- * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationStartsWith(string|array $key, string $search, ?string $locale = null) Search for translated fields that start with the given text
- * @method static \Illuminate\Database\Eloquent\Builder searchByTranslationEndsWith(string|array $key, string $search, ?string $locale = null) Search for translated fields that end with the given text
- *
- * Required Implementation:
- * Models using this trait must implement the translatedKeys() method that returns an array
- * of column names that should be translatable.
- *
- * Example:
- * ```php
- * public static function translatedKeys(): array
- * {
- *     return ['title', 'description'];
- * }
- * ```
- *
- * Optional Fallback Configuration:
- * Models can customize their fallback locale chain by implementing getTranslatableFallback()
- * method or defining a $translatableFallback property.
- *
- * @phpstan-ignore-next-line
+ * @method static Builder<static>|static withTranslations(?array $locales = null) Eager load translations for specified locales (or default locale chain)
+ * @method static Builder<static>|static searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like') Search in translated fields with locale fallback support
+ * @method static Builder<static>|static searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null) Search for exact matches in translated fields
+ * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that start with the given text
+ * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that end with the given text
+ * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null) Filter models that have a translation for the given key and locale(s)
+ * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null) Filter models where translation matches a specific value
  */
 trait HasTranslations
 {
-    /**
-     * Boot the trait.
-     */
-    protected static function bootHasTranslations(): void
-    {
-        static::addGlobalScope(new TranslatableScope);
-    }
+    protected ?array $resolvedLocales = null;
+    protected ?array $translationsMap = null;
+    protected ?array $cachedTranslatableAttributes = null;
 
     /**
      * Get all the translations for the model.
@@ -62,152 +40,345 @@ trait HasTranslations
     }
 
     /**
-     * Check if the model has a translation for the given locale.
+     * Boot the HasTranslations trait.
+     */
+    protected static function bootHasTranslations(): void
+    {
+        static::retrieved(function ($model) {
+            $model->indexTranslations();
+        });
+
+        static::saved(function ($model) {
+            if ($model->relationLoaded('translations')) {
+                $model->translationsMap = null;
+            }
+        });
+    }
+
+    /**
+     * Get the translated value for a given key using the locale fallback chain.
+     */
+    public function getTranslation(string $key, string|array|null $locales = null): mixed
+    {
+        if ($this->translationsMap === null) {
+            $this->indexTranslations();
+        }
+
+        $locales = $this->getResolvedLocales($locales);
+
+        foreach ($locales as $locale) {
+            $this->ensureLocaleLoaded($locale);
+
+            if (isset($this->translationsMap[$locale][$key])) {
+                return $this->translationsMap[$locale][$key];
+            }
+        }
+
+        return $this->{$key};
+    }
+
+    /**
+     * Check if the model has a translation for the given key and locale.
      */
     public function hasTranslation(string $key, ?string $locale = null): bool
     {
-        $locale = $locale ?? $this->getFallbackTranslationLocale($locale);
+        $locale = $locale ?? $this->getLocaleChain()[0] ?? app()->getLocale();
 
         return $this->translations()
-            ->where([
-                'locale' => $locale,
-                'key' => $key,
-            ])
-            ->when(
-                is_array($locale),
-                fn ($query) => $query->whereIn('locale', $locale),
-                fn ($query) => $query->where('locale', $locale)
-            )
+            ->where('locale', '=', $locale)
+            ->where('key', '=', $key)
             ->exists();
     }
 
     /**
-     * Set the translation for the given locale.
+     * Set or update the translation for the given key and locale.
      */
     public function setTranslation(string $key, string $value, ?string $locale = null): self
     {
-        $locale = $locale ?? $this->getFallbackTranslationLocale($locale);
+        $locale = $locale ?? $this->getLocaleChain()[0] ?? app()->getLocale();
 
-        if ($this->hasTranslation($key, $locale)) {
-            $this->getTranslation($key, $locale)->update(['text' => $value]);
-        } else {
-            $this->translations()->create([
-                'key' => $key,
-                'locale' => $locale,
-                'text' => $value,
-            ]);
+        $this->translations()->updateOrCreate(
+            ['key' => $key, 'locale' => $locale],
+            ['text' => $value]
+        );
+
+        // Update cache directly without forcing full reindex
+        if ($this->translationsMap !== null) {
+            $this->translationsMap[$locale][$key] = $value;
         }
 
         return $this;
     }
 
     /**
-     * Get the translation for the given locale.
+     * Set multiple translations at once for a given locale.
      */
-    public function getTranslation(string $key, ?string $locale = null): ?Translatable
+    public function setTranslations(array $translations, ?string $locale = null): self
     {
-        // Build locale priority array once
-        $currentLocale = $locale ?? app()->getLocale();
-        $fallbackLocale = $this->getFallbackTranslationLocale();
+        $locale = $locale ?? $this->getLocaleChain()[0] ?? app()->getLocale();
 
-        // Build priority array efficiently
-        $localePriority = [$currentLocale];
-        if (is_array($fallbackLocale)) {
-            $localePriority = array_merge($localePriority, $fallbackLocale);
-        } elseif ($fallbackLocale !== $currentLocale) {
-            $localePriority[] = $fallbackLocale;
+        foreach ($translations as $key => $value) {
+            $this->translations()->updateOrCreate(
+                ['key' => $key, 'locale' => $locale],
+                ['text' => $value]
+            );
         }
 
-        // Remove duplicates while preserving order
-        $localePriority = array_values(array_unique($localePriority));
-
-        // Use a simpler query with ORDER BY instead of window functions
-        /** @var ?Translatable $translatable */
-        $translatable = $this->translations()
-            ->where('key', $key)
-            ->whereIn('locale', $localePriority)
-            ->orderByRaw($this->buildLocaleOrderExpression($localePriority))
-            ->orderBy('id', 'desc') // Tie-breaker for same locale
-            ->first();
-
-        return $translatable;
-    }
-
-    /**
-     * Build ORDER BY expression for locale priority without using window functions.
-     */
-    private function buildLocaleOrderExpression(array $localePriority): string
-    {
-        $cases = [];
-        foreach ($localePriority as $index => $locale) {
-            if (is_null($locale)) {
-                $cases[] = 'WHEN locale IS NULL THEN '.($index + 1);
-            } else {
-                $cases[] = 'WHEN locale = '.DB::connection()->getPdo()->quote($locale).' THEN '.($index + 1);
+        // Update cache directly without forcing full reindex
+        if ($this->translationsMap !== null) {
+            foreach ($translations as $key => $value) {
+                $this->translationsMap[$locale][$key] = $value;
             }
         }
 
-        return 'CASE '.implode(' ', $cases).' ELSE '.(count($localePriority) + 1).' END';
+        return $this;
     }
 
     /**
-     * Get all or filtered translations for the model as collection.
-     * When locale is specified, includes fallback locales for better coverage.
+     * Override getAttribute to automatically translate attributes.
      */
-    public function getTranslations(?string $key = null, ?string $locale = null): Collection
+    public function getAttribute($key): mixed
     {
-        $query = $this->translations();
+        $value = parent::getAttribute($key);
 
-        // Apply key filter first (most selective)
-        if (! is_null($key)) {
-            $query->where('key', $key);
+        // Only auto-translate if:
+        // 1. Feature is enabled
+        // 2. Key is in translatable attributes
+        // 3. We haven't already retrieved a translation (avoid infinite loops)
+        if (
+            $this->autoTranslateAttributes() &&
+            in_array($key, $this->getTranslatableAttributes(), true)
+        ) {
+            $translation = $this->getTranslation($key);
+
+            return $translation ?? $value;
         }
 
-        // Apply locale filter with fallback support
-        if (! is_null($locale)) {
-            $resolvedLocale = app(LocaleResolver::class)->resolve($locale);
-            $fallbackLocale = $this->getFallbackTranslationLocale();
+        return $value;
+    }
 
-            // Build locale list including fallbacks
-            $locales = [$resolvedLocale];
-            if (is_array($fallbackLocale)) {
-                $locales = array_merge($locales, $fallbackLocale);
-            } elseif ($fallbackLocale !== $resolvedLocale) {
-                $locales[] = $fallbackLocale;
+    /**
+     * Eager load translations for specified locales.
+     */
+    public function scopeWithTranslations(Builder $query, ?array $locales = null): void
+    {
+        $locales = $locales ?? resolve(LocaleResolver::class)->getLocales();
+
+        $query->with([
+            'translations' => fn (Builder $q) => $q->whereIn('locale', $locales),
+        ]);
+    }
+
+    /**
+     * Search for models by translated field value with locale fallback support.
+     */
+    public function scopeSearchByTranslation(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales = null,
+        string $operator = 'like'
+    ): void {
+        $localePriority = $this->normalizeLocales($locales);
+
+        $searchValue = match ($operator) {
+            'like' => "%{$search}%",
+            'starts_with' => "{$search}%",
+            'ends_with' => "%{$search}",
+            'exact' => $search,
+            default => "%{$search}%"
+        };
+
+        $comparison = $operator === 'exact' ? '=' : 'like';
+
+        if (is_array($key)) {
+            $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
+                $q->whereIn('locale', $localePriority)
+                    ->whereIn('key', $key)
+                    ->where('text', $comparison, $searchValue);
+            });
+        } else {
+            $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
+                $q->where('key', $key)
+                    ->whereIn('locale', $localePriority)
+                    ->where('text', $comparison, $searchValue);
+            });
+        }
+    }
+
+    /**
+     * Search for exact matches in translated fields.
+     */
+    public function scopeSearchByTranslationExact(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales = null
+    ): void {
+        $query->searchByTranslation($key, $search, $locales, 'exact');
+    }
+
+    /**
+     * Search for translated fields that start with the given text.
+     */
+    public function scopeSearchByTranslationStartsWith(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales = null
+    ): void {
+        $query->searchByTranslation($key, $search, $locales, 'starts_with');
+    }
+
+    /**
+     * Search for translated fields that end with the given text.
+     */
+    public function scopeSearchByTranslationEndsWith(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales = null
+    ): void {
+        $query->searchByTranslation($key, $search, $locales, 'ends_with');
+    }
+
+    /**
+     * Filter models that have a translation for the given key and locale(s).
+     */
+    public function scopeWhereHasTranslation(
+        Builder $query,
+        string $key,
+        string|array|null $locales = null
+    ): void {
+        $localePriority = $this->normalizeLocales($locales);
+
+        $query->whereHas('translations', function ($q) use ($key, $localePriority) {
+            $q->where('key', $key)
+                ->whereIn('locale', $localePriority);
+        });
+    }
+
+    /**
+     * Filter models where translation matches a specific value.
+     */
+    public function scopeWhereTranslation(
+        Builder $query,
+        string $key,
+        string $value,
+        string|array|null $locales = null
+    ): void {
+        $query->searchByTranslationExact($key, $value, $locales);
+    }
+
+    /**
+     * Build an optimized index of translations for O(1) attribute access.
+     */
+    protected function indexTranslations(): void
+    {
+        if ($this->relationLoaded('translations')) {
+            $this->translationsMap = [];
+
+            foreach ($this->translations as $translation) {
+                $this->translationsMap[$translation->locale][$translation->key] = $translation->text;
             }
 
-            // Use whereIn for better performance with multiple locales
-            $query->whereIn('locale', array_unique($locales));
+            return;
         }
 
-        /** @var Collection<Translatable> $translatableRecords */
-        return $query->get();
+        $this->translationsMap = [];
     }
 
     /**
-     * Get the untranslated value for a specific key.
-     * This is useful for accessing the base value when no translation exists.
+     * Get the locale fallback chain for this model.
      */
-    public function getUntranslated(string $key): ?string
+    protected function getLocaleChain(): array
     {
-        return $this->attributes["_base_{$key}"] ?? null;
+        return resolve(LocaleResolver::class)->getLocales();
     }
 
     /**
-     * Get the fallback translation locale.
+     * Resolve and cache the locale chain for translation lookups.
      */
-    public function getFallbackTranslationLocale(?string $locale = null): string|array
+    protected function getResolvedLocales(string|array|null $locales = null): array
     {
-        // Get the fallback locale from the model via method
-        if (method_exists($this, 'getTranslatableFallback')) {
-            return $this->getTranslatableFallback();
+        if ($locales !== null) {
+            return is_array($locales) ? $locales : [$locales];
         }
 
-        // Get the fallback locale from the model via method
-        if (property_exists($this, 'translatableFallback')) {
-            return $this->translatableFallback;
+        if ($this->resolvedLocales !== null) {
+            return $this->resolvedLocales;
         }
 
-        return app(LocaleResolver::class)->resolveFallback($locale);
+        $this->resolvedLocales = $this->getLocaleChain();
+
+        return $this->resolvedLocales;
+    }
+
+    /**
+     * Check if automatic attribute translation is enabled for this model.
+     */
+    protected function autoTranslateAttributes(): bool
+    {
+        return config('translatable.auto_translate_attributes', true);
+    }
+
+    /**
+     * Get the list of translatable attribute keys.
+     */
+    protected function getTranslatableAttributes(): array
+    {
+        if ($this->cachedTranslatableAttributes !== null) {
+            return $this->cachedTranslatableAttributes;
+        }
+
+        // Backwards compatibility: check for translatedKeys method first
+        if (method_exists($this, 'translatedKeys')) {
+            return $this->cachedTranslatableAttributes = $this->translatedKeys();
+        }
+
+        // Check for $translatable property (similar to spatie/laravel-translatable)
+        if (property_exists($this, 'translatable') && is_array($this->translatable)) {
+            return $this->cachedTranslatableAttributes = $this->translatable;
+        }
+
+        return $this->cachedTranslatableAttributes = [];
+    }
+
+    /**
+     * Ensure translations for a specific locale are loaded and indexed.
+     */
+    protected function ensureLocaleLoaded(string $locale): void
+    {
+        if ($this->translationsMap !== null && isset($this->translationsMap[$locale])) {
+            return;
+        }
+
+        $translations = $this->translations()
+            ->where('locale', $locale)
+            ->get();
+
+        if ($this->translationsMap === null) {
+            $this->translationsMap = [];
+        }
+
+        foreach ($translations as $translation) {
+            $this->translationsMap[$locale][$translation->key] = $translation->text;
+        }
+
+        if ($this->relationLoaded('translations')) {
+            $this->setRelation('translations', $this->translations->merge($translations));
+        }
+    }
+
+    /**
+     * Normalize locale parameter to array format.
+     */
+    protected function normalizeLocales(string|array|null $locales): array
+    {
+        if (is_null($locales)) {
+            return resolve(LocaleResolver::class)->getLocales();
+        }
+
+        return is_array($locales) ? $locales : [$locales];
     }
 }

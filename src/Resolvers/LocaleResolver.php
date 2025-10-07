@@ -4,33 +4,24 @@ namespace mindtwo\LaravelTranslatable\Resolvers;
 
 class LocaleResolver
 {
-    public function resolve(?string $locale = null): string
+    protected ?array $locales = null;
+
+    public function getLocales(): array
     {
-        if (! is_null($locale)) {
-            return $locale;
+        if ($this->locales !== null) {
+            return $this->locales;
         }
 
-        return app()->getLocale();
+        return [
+            app()->getLocale(),
+            app()->getFallbackLocale(),
+        ];
     }
 
-    public function resolveFallback(?string $locale = null): string|array
+    public function setLocales(array $locales): self
     {
-        if (! is_null($locale)) {
-            return $locale;
-        }
+        $this->locales = $locales;
 
-        // Get the Laravel fallback locale
-        $fallbackLocale = app()->getFallbackLocale();
-
-        // Check if there's a configured locale chain in the app config
-        $localeChain = config('translatable.locale_chain', []);
-
-        if (! empty($localeChain) && is_array($localeChain)) {
-            // If a locale chain is configured, use it
-            return $localeChain;
-        }
-
-        // Default behavior: return just the Laravel fallback locale
-        return $fallbackLocale;
+        return $this;
     }
 }
