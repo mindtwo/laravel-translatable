@@ -76,7 +76,7 @@ trait HasTranslations
             }
         }
 
-        return $this->{$key};
+        return parent::getAttribute($key);
     }
 
     /**
