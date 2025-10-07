@@ -63,10 +63,10 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 
             if (count($locales) === 0) {
                 // No locales specified, skip eager loading
-                return;
+                return $query;
             }
 
-            $query->with([
+            return $query->with([
                 'translations' => fn (Builder $q) => $q->whereIn('locale', $locales),
             ]);
         });
@@ -112,6 +112,8 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
                         ->where('text', $comparison, $searchValue);
                 });
             }
+
+            return $query;
         });
 
         // Add additional macros for exact, starts_with, and ends_with searches
@@ -121,7 +123,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string $search,
             string|array|null $locales = null
         ) {
-            $query->searchByTranslation($key, $search, $locales, 'exact');
+            return $query->searchByTranslation($key, $search, $locales, 'exact');
         });
 
         $builder->macro('searchByTranslationStartsWith', function (
@@ -130,7 +132,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string $search,
             string|array|null $locales = null
         ) {
-            $query->searchByTranslation($key, $search, $locales, 'starts_with');
+            return $query->searchByTranslation($key, $search, $locales, 'starts_with');
         });
 
         $builder->macro('searchByTranslationEndsWith', function (
@@ -139,7 +141,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string $search,
             string|array|null $locales = null
         ) {
-            $query->searchByTranslation($key, $search, $locales, 'ends_with');
+            return $query->searchByTranslation($key, $search, $locales, 'ends_with');
         });
     }
 
@@ -163,6 +165,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
                     ->whereIn('locale', $localePriority);
             });
 
+            return $query;
         });
 
     }
@@ -196,16 +199,18 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string $direction = 'asc'
         ) {
             $locale = resolve(LocaleResolver::class)->getLocales()[0] ?? app()->getLocale();
+            $model = $query->getModel();
+            $translationsModel = config('translatable.model');
 
-            $query->orderBy(
-                $query->getModel()->translations()
-                    ->select('text')
-                    ->where('key', $key)
-                    ->where('locale', $locale)
-                    ->limit(1)
-                    ->getQuery(),
-                $direction
-            );
+            $subQuery = $translationsModel::query()
+                ->select('text')
+                ->where('key', $key)
+                ->where('locale', $locale)
+                ->where('translatable_type', $model->getMorphClass())
+                ->whereColumn('translatable_id', $model->getTable().'.'.$model->getKeyName())
+                ->limit(1);
+
+            return $query->orderBy($subQuery, $direction);
         });
     }
 }

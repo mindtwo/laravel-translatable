@@ -20,7 +20,7 @@ class LaravelTranslatableServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(LocaleResolver::class, function (Application $app) {
-            return $app->make(config('translatable.resolver'));
+            return new (config('translatable.resolver'));
         });
     }
 }

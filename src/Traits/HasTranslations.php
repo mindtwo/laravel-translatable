@@ -87,6 +87,69 @@ trait HasTranslations
     }
 
     /**
+     * Get the untranslated value for a given key.
+     * This returns the base attribute value if no translation exists.
+     *
+     * @param  string  $key  The translation key to retrieve
+     * @return mixed The untranslated value
+     */
+    public function getUntranslated(string $key): mixed
+    {
+        // Return the base attribute value if no translation exists
+        return parent::getAttribute($key);
+    }
+
+    /**
+     * Get all translations for a specific key across all locales.
+     * Returns an associative array with locale as key and translation as value.
+     *
+     * @param  string  $key  The translation key to retrieve
+     * @return array<string, string> Associative array of translations by locale
+     */
+    public function getAllTranslations(string $key): array
+    {
+        return $this->translations()
+            ->where('key', $key)
+            ->pluck('text', 'locale')
+            ->toArray();
+    }
+
+    /**
+     * Get translations for a specific key across all locales.
+     * Returns an associative array with locale as key and translation as value.
+     *
+     * @param  string  $key  The translation key to retrieve
+     * @param  string|array<string>|null  $locales  Optional specific locales to filter by
+     * @return array<string, string> Associative array of translations by locale
+     */
+    public function getTranslations(string $key, string|array|null $locales = null): array
+    {
+
+        $locales = $this->getResolvedLocales($locales);
+
+        if (count($locales) === 0) {
+            // No locales specified, return empty array
+            return [];
+        }
+
+        if ($this->translationsMap === null) {
+            $this->indexTranslations();
+        }
+
+        $translations = [];
+
+        foreach ($locales as $locale) {
+            $this->ensureLocaleLoaded($locale);
+
+            if (isset($this->translationsMap[$locale][$key])) {
+                $translations[$locale] = $this->translationsMap[$locale][$key];
+            }
+        }
+
+        return $translations;
+    }
+
+    /**
      * Check if the model has a translation for the given key and locale.
      */
     public function hasTranslation(string $key, ?string $locale = null): bool

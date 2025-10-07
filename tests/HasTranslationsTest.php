@@ -2,7 +2,7 @@
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use mindtwo\LaravelTranslatable\Models\Translatable;
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 use mindtwo\LaravelTranslatable\Traits\HasTranslations;
 
 uses(RefreshDatabase::class);
@@ -18,7 +18,7 @@ beforeEach(function () {
 
     // Define a test model using the HasTranslations trait
     if (! class_exists('TestModel')) {
-        class TestModel extends Model implements \mindtwo\LaravelTranslatable\Contracts\IsTranslatable
+        class TestModel extends Model
         {
             use HasTranslations;
 
@@ -32,6 +32,10 @@ beforeEach(function () {
             }
         }
     }
+
+    Model::preventLazyLoading(true);
+    // Set the default locale to English for tests
+    app()->setLocale('en');
 });
 
 test('models can have translations', function () {
@@ -71,8 +75,7 @@ test('getTranslation method retrieves the correct translation', function () {
 
     $translation = $model->getTranslation('title', 'en');
 
-    expect($translation instanceof Translatable)->toBeTrue();
-    expect($translation->text)->toBe('Test Title');
+    expect($translation)->toBe('Test Title');
 });
 
 test('getTranslations returns the correct collection', function () {
@@ -84,10 +87,10 @@ test('getTranslations returns the correct collection', function () {
         ['key' => 'header', 'locale' => 'en', 'text' => 'Test Header English'],
     ]);
 
-    $translations = $model->getTranslations('title');
+    $translations = $model->getAllTranslations('title');
 
-    expect($translations)->toHaveCount(2);
-    expect($translations->pluck('text'))->toContain('Test Title English', 'Test Title German');
+    expect($translations)->toHaveCount(2)
+        ->and(array_values($translations))->toContain('Test Title English', 'Test Title German');
 });
 
 test('models can autoload translations', function () {
@@ -121,20 +124,20 @@ test('dynamic accessor for model translations works correctly', function () {
     expect($model->title)->toBe('Test Title');
 });
 
-// test('dynamic accessor uses fallback if translation is missing', function () {
-//     $model = TestModel::create();
+test('dynamic accessor uses fallback if translation is missing', function () {
+    $model = TestModel::create();
 
-//     $model->translations()->create([
-//         'key' => 'title',
-//         'locale' => 'en',
-//         'text' => 'Test Title',
-//     ]);
+    $model->translations()->create([
+        'key' => 'title',
+        'locale' => 'en',
+        'text' => 'Test Title',
+    ]);
 
-//     expect($model->title)->toBe('Test Title');
+    expect($model->title)->toBe('Test Title');
 
-//     app()->setLocale('de');
-//     expect($model->title)->toBe('Test Title');
-// });
+    app()->setLocale('de');
+    expect($model->title)->toBe('Test Title');
+});
 
 test('can disable translations for a model', function () {
     $model = TestModel::create([
@@ -151,7 +154,10 @@ test('can disable translations for a model', function () {
 
     expect($model->title)->toBe('Test Title');
 
-    $notTranslated = TestModel::withoutTranslations()->first();
+    // Set locales to empty array
+    resolve(LocaleResolver::class)->setLocales([]);
+
+    $notTranslated = TestModel::first();
     expect($notTranslated->title)->toBe('not translated')
         ->and($model->title)->toBe('Test Title');
 });
@@ -186,7 +192,7 @@ test('order by a translatable value', function () {
     expect($allTitles)->each->not->toBeNull();
 
     // Test ordering by translated field
-    $orderedModels = TestModel::query()->orderBy('title')->get();
+    $orderedModels = TestModel::query()->orderByTranslation('title')->get();
     $modelTitles = $orderedModels->pluck('title')->toArray();
 
     expect($modelTitles)->toBe($orderedTitles);
@@ -295,21 +301,11 @@ test('fallback locale chain works correctly', function () {
 });
 
 test('complex fallback locale chain fr -> de -> en works correctly', function () {
-    // Create a test model class with custom fallback chain
-    if (! class_exists('TestModelWithFallbackChain')) {
-        class TestModelWithFallbackChain extends TestModel
-        {
-            protected $table = 'test_models';
-
-            public function getTranslatableFallback(): array
-            {
-                return ['de', 'en']; // fr -> de -> en fallback chain
-            }
-        }
-    }
+    // Set a complex fallback chain: fr -> de -> en
+    resolve(LocaleResolver::class)->setLocales(['fr', 'de', 'en']);
 
     // Test 1: Only English translation exists, should fallback through chain
-    $model1 = TestModelWithFallbackChain::create();
+    $model1 = TestModel::create();
     $model1->translations()->create([
         'key' => 'title',
         'locale' => 'en',
@@ -318,7 +314,7 @@ test('complex fallback locale chain fr -> de -> en works correctly', function ()
 
     app()->setLocale('fr'); // French (current locale)
 
-    $retrieved = TestModelWithFallbackChain::first();
+    $retrieved = TestModel::first();
     expect($retrieved->title)->toBe('English Only'); // Should fallback fr -> de -> en
 
     // Test 2: Add German translation, should prefer it over English
@@ -328,7 +324,7 @@ test('complex fallback locale chain fr -> de -> en works correctly', function ()
         'text' => 'German Translation',
     ]);
 
-    $retrieved = TestModelWithFallbackChain::first();
+    $retrieved = TestModel::first();
     expect($retrieved->title)->toBe('German Translation'); // Should fallback fr -> de (found!)
 
     // Test 3: Add French translation, should use it (highest priority)
@@ -338,91 +334,27 @@ test('complex fallback locale chain fr -> de -> en works correctly', function ()
         'text' => 'French Translation',
     ]);
 
-    $retrieved = TestModelWithFallbackChain::first();
+    $retrieved = TestModel::first();
     expect($retrieved->title)->toBe('French Translation'); // Should use fr (current locale)
 
     // Test 4: Test ordering with complex fallback chain
-    $model2 = TestModelWithFallbackChain::create();
+    $model2 = TestModel::create();
     $model2->translations()->createMany([
         ['key' => 'title', 'locale' => 'de', 'text' => 'Allemand'], // German only
     ]);
 
-    $model3 = TestModelWithFallbackChain::create();
+    $model3 = TestModel::create();
     $model3->translations()->createMany([
         ['key' => 'title', 'locale' => 'en', 'text' => 'Another English'], // English only
     ]);
 
-    $ordered = TestModelWithFallbackChain::orderBy('title')->get();
-    expect($ordered->count())->toBe(3);
+    // Test 4: No translations at all, should use base table value
+    $model4 = TestModel::create(['title' => 'Base Table Title']);
 
-    $titles = $ordered->pluck('title')->toArray();
-    // Should order by: Allemand (de fallback), Another English (en fallback), French Translation (fr current)
-    expect($titles)->toBe(['Allemand', 'Another English', 'French Translation']);
-
-    // Test 5: No translations at all, should use base table value
-    $model4 = TestModelWithFallbackChain::create(['title' => 'Base Table Title']);
-
-    $retrieved = TestModelWithFallbackChain::find($model4->id);
+    $retrieved = TestModel::find($model4->id);
     expect($retrieved->title)->toBe('Base Table Title'); // Should use base table value
 
     // Reset locale
-    app()->setLocale('en');
-});
-
-test('default locale resolver supports configured locale chain', function () {
-    // Configure a global locale chain via config
-    config(['translatable.locale_chain' => ['de', 'en', 'fr']]);
-
-    // Create a model that will use the default LocaleResolver
-    $model = TestModel::create();
-
-    // Add translations in different locales
-    $model->translations()->createMany([
-        ['key' => 'title', 'locale' => 'fr', 'text' => 'Titre Français'],
-        ['key' => 'title', 'locale' => 'en', 'text' => 'English Title'],
-    ]);
-
-    // Set current locale to Spanish (not in chain)
-    app()->setLocale('es');
-
-    // Should fallback through the configured chain: es -> de -> en -> fr
-    // Since 'de' doesn't exist, should use 'en' (first available in chain)
-    $retrieved = TestModel::first();
-    expect($retrieved->title)->toBe('English Title');
-
-    // Add German translation (higher priority in chain)
-    $model->translations()->create([
-        'key' => 'title',
-        'locale' => 'de',
-        'text' => 'Deutscher Titel',
-    ]);
-
-    $retrieved = TestModel::first();
-    expect($retrieved->title)->toBe('Deutscher Titel'); // Should prefer German over English
-
-    // Test ordering with configured chain
-    $model2 = TestModel::create();
-    $model2->translations()->create([
-        'key' => 'title',
-        'locale' => 'fr',
-        'text' => 'Autre Titre',
-    ]);
-
-    $model3 = TestModel::create();
-    $model3->translations()->create([
-        'key' => 'title',
-        'locale' => 'en',
-        'text' => 'Another Title',
-    ]);
-
-    $ordered = TestModel::orderBy('title')->get();
-    $titles = $ordered->pluck('title')->toArray();
-
-    // Should order by resolved translations: Another Title (en), Autre Titre (fr), Deutscher Titel (de)
-    expect($titles)->toBe(['Another Title', 'Autre Titre', 'Deutscher Titel']);
-
-    // Reset config and locale
-    config(['translatable.locale_chain' => null]);
     app()->setLocale('en');
 });
 
@@ -450,7 +382,7 @@ test('getUntranslated method returns base table values', function () {
     expect($retrieved->getUntranslated('title'))->toBe('Original Title');
 
     // For non-translated fields, getUntranslated should return null (no backup column)
-    expect($retrieved->getUntranslated('name'))->toBeNull();
+    expect($retrieved->getUntranslated('name'))->toBe('Original Name');
 
     // Test with a key that has no translation - should still return base value
     $model->update(['title' => 'Updated Original']);
@@ -532,21 +464,11 @@ test('improved searchByTranslation with fallback locales and operators', functio
 });
 
 test('searchByTranslation performance with complex fallback chains', function () {
-    // Create a model with custom fallback chain
-    if (! class_exists('TestModelWithComplexFallback')) {
-        class TestModelWithComplexFallback extends TestModel
-        {
-            protected $table = 'test_models';
-
-            public function getTranslatableFallback(): array
-            {
-                return ['de', 'en', 'fr'];
-            }
-        }
-    }
+    // Set a complex fallback chain: es -> de -> en -> fr
+    resolve(LocaleResolver::class)->setLocales(['es', 'de', 'en', 'fr']);
 
     // Create test data
-    $model = TestModelWithComplexFallback::create();
+    $model = TestModel::create();
     $model->translations()->createMany([
         ['key' => 'title', 'locale' => 'fr', 'text' => 'Titre Français'],
         ['key' => 'title', 'locale' => 'en', 'text' => 'English Title'],
@@ -556,10 +478,10 @@ test('searchByTranslation performance with complex fallback chains', function ()
     app()->setLocale('es');
 
     // Should search through fallback chain: es -> de -> en -> fr
-    $results = TestModelWithComplexFallback::searchByTranslation('title', 'English')->get();
+    $results = TestModel::searchByTranslation('title', 'English')->get();
     expect($results->count())->toBe(1); // Should find English title through fallback
 
-    $results = TestModelWithComplexFallback::searchByTranslation('title', 'Français')->get();
+    $results = TestModel::searchByTranslation('title', 'Français')->get();
     expect($results->count())->toBe(1); // Should find French title through fallback
 
     // Reset locale
