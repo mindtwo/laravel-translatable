@@ -28,7 +28,9 @@ use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 trait HasTranslations
 {
     protected ?array $resolvedLocales = null;
+
     protected ?array $translationsMap = null;
+
     protected ?array $cachedTranslatableAttributes = null;
 
     /**
