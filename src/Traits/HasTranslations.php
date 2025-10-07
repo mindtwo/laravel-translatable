@@ -49,12 +49,6 @@ trait HasTranslations
         static::retrieved(function ($model) {
             $model->indexTranslations();
         });
-
-        static::saved(function ($model) {
-            if ($model->relationLoaded('translations')) {
-                $model->translationsMap = null;
-            }
-        });
     }
 
     /**
