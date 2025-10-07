@@ -141,10 +141,6 @@ trait HasTranslations
     {
         $value = parent::getAttribute($key);
 
-        // Only auto-translate if:
-        // 1. Feature is enabled
-        // 2. Key is in translatable attributes
-        // 3. We haven't already retrieved a translation (avoid infinite loops)
         if (
             $this->autoTranslateAttributes() &&
             in_array($key, $this->getTranslatableAttributes(), true)
