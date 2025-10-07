@@ -13,11 +13,11 @@ The `mindtwo/laravel-translatable` package provides a simple and effective way t
 ## Features
 
 - ✅ **Automatic Translation Override**: Translated fields automatically override base model attributes
-- ✅ **Fallback Locale Chains**: Sophisticated fallback system (e.g., `fr` → `de` → `en`)
+- ✅ **Fallback Locale Support**: Uses Laravel's app locale and fallback locale
 - ✅ **Query Scope Methods**: Search, filter, and order by translated content
 - ✅ **Performance Optimized**: Efficient database queries with proper indexing
 - ✅ **IDE Autocomplete**: Full PHPDoc support for all methods
-- ✅ **Flexible Configuration**: Global and per-model locale chain configuration
+- ✅ **Flexible Configuration**: Customizable locale resolution and auto-translation
 - ✅ **Laravel Integration**: Works seamlessly with Eloquent relationships and collections
 
 ## Installation
@@ -59,22 +59,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default Locale Chain
+    | Locale Resolver
     |--------------------------------------------------------------------------
     |
-    | Define a default fallback locale chain for all translatable models.
-    | When a translation is not found in the current locale, the system will
-    | try each locale in this chain until a translation is found.
-    |
-    | Example: ['de', 'en', 'fr'] means:
-    | Current Locale → German → English → French → Base Table Value
+    | The resolver class to use for determining locale fallback chains.
     |
     */
-    'locale_chain' => [
-        // 'de', // German as primary fallback
-        // 'en', // English as secondary fallback
-        // 'fr', // French as tertiary fallback
-    ],
+    'resolver' => \mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Auto Translate Attributes
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, translatable attributes will be automatically translated
+    | when accessed via magic attribute accessors (e.g., $model->title).
+    | This can be overridden per model by implementing the autoTranslateAttributes() method.
+    |
+    */
+    'auto_translate_attributes' => true,
 ];
 ```
 
@@ -88,9 +91,8 @@ return [
 
 use Illuminate\Database\Eloquent\Model;
 use mindtwo\LaravelTranslatable\Traits\HasTranslations;
-use mindtwo\LaravelTranslatable\Contracts\IsTranslatable;
 
-class Product extends Model implements IsTranslatable
+class Product extends Model
 {
     use HasTranslations;
 
@@ -99,18 +101,7 @@ class Product extends Model implements IsTranslatable
     /**
      * Define which fields are translatable
      */
-    public static function translatedKeys(): array
-    {
-        return ['title', 'description'];
-    }
-
-    /**
-     * Optional: Custom fallback locale chain for this model
-     */
-    public function getTranslatableFallback(): array
-    {
-        return ['de', 'en', 'fr']; // German → English → French
-    }
+    protected $translatable = ['title', 'description'];
 }
 ```
 
@@ -123,13 +114,16 @@ $product = Product::create([
     'price' => 99.99
 ]);
 
-// Add translations
+// Add individual translations
 $product->setTranslation('title', 'English Product', 'en');
 $product->setTranslation('title', 'Deutsches Produkt', 'de');
 $product->setTranslation('title', 'Produit Français', 'fr');
 
-$product->setTranslation('description', 'English Description', 'en');
-$product->setTranslation('description', 'Deutsche Beschreibung', 'de');
+// Or add multiple translations at once for a locale
+$product->setTranslations([
+    'title' => 'English Product',
+    'description' => 'English Description',
+], 'en');
 ```
 
 ### 3. Automatic Translation Override
@@ -138,13 +132,21 @@ $product->setTranslation('description', 'Deutsche Beschreibung', 'de');
 // Set application locale
 app()->setLocale('de');
 
-$product = Product::first();
+// Load model with translations
+$product = Product::withTranslations()->first();
 echo $product->title; // "Deutsches Produkt" (automatically translated!)
 echo $product->description; // "Deutsche Beschreibung"
 echo $product->price; // 99.99 (non-translated field remains unchanged)
 
 // Get original value if needed
 echo $product->getUntranslated('title'); // "Default Title"
+
+// Get specific translation
+echo $product->getTranslation('title', 'en'); // "English Product"
+
+// Get all translations for a key
+$titles = $product->getAllTranslations('title');
+// ['en' => 'English Product', 'de' => 'Deutsches Produkt', 'fr' => 'Produit Français']
 ```
 
 ## Advanced Usage
@@ -154,8 +156,17 @@ echo $product->getUntranslated('title'); // "Default Title"
 All scope methods support IDE autocomplete and have full parameter type hints:
 
 ```php
+// Eager load translations for current locale
+$products = Product::withTranslations()->get();
+
+// Eager load translations for specific locales
+$products = Product::withTranslations(['en', 'de'])->get();
+
 // Search in translated fields (with fallback locale support)
 $products = Product::searchByTranslation('title', 'Product')->get();
+
+// Search in specific locales
+$products = Product::searchByTranslation('title', 'Product', ['en', 'de'])->get();
 
 // Exact match search
 $exact = Product::searchByTranslationExact('title', 'Deutsches Produkt')->get();
@@ -167,49 +178,67 @@ $endsWith = Product::searchByTranslationEndsWith('description', 'warranty')->get
 // Multiple field search
 $multiField = Product::searchByTranslation(['title', 'description'], 'search term')->get();
 
-// Order by translated field
-$sorted = Product::orderByTranslation('title', 'en', 'asc')->get();
+// Filter models that have a translation
+$hasTitle = Product::whereHasTranslation('title')->get();
+$hasGermanTitle = Product::whereHasTranslation('title', 'de')->get();
 
-// Get base table values (without translations)
-$baseProducts = Product::withoutTranslations()->get();
+// Filter by exact translation value
+$products = Product::whereTranslation('title', 'Exact Title')->get();
+
+// Order by translated field
+$sorted = Product::orderByTranslation('title', 'asc')->get();
 
 // Method chaining works perfectly
 $results = Product::searchByTranslationStartsWith('title', 'Premium')
+    ->whereHasTranslation('description')
     ->orderByTranslation('title')
     ->limit(10)
     ->get();
 ```
 
-### Fallback Locale Chains
+### Locale Resolution
 
-#### Global Configuration
-
-Configure a default fallback chain in your `config/translatable.php`:
+By default, the package uses Laravel's built-in locale configuration:
 
 ```php
-'locale_chain' => ['de', 'en', 'fr']
+// The LocaleResolver provides locales in this order:
+// 1. Current application locale: app()->getLocale()
+// 2. Fallback locale: app()->getFallbackLocale()
 ```
 
-This creates the fallback order: **Current Locale** → **German** → **English** → **French** → **Base Table Value**
+#### Custom Locale Resolution
 
-#### Model-Specific Configuration
-
-Override the global chain for specific models:
+You can customize locale resolution by extending the `LocaleResolver`:
 
 ```php
-class Product extends Model implements IsTranslatable
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
+
+class CustomLocaleResolver extends LocaleResolver
 {
-    use HasTranslations;
-
-    // Method approach
-    public function getTranslatableFallback(): array
+    public function getLocales(): array
     {
-        return ['es', 'en']; // Spanish → English for this model
+        // Return custom locale chain
+        return ['de', 'en', 'fr'];
     }
-
-    // Or property approach
-    protected $translatableFallback = ['es', 'en'];
 }
+```
+
+Then register it in your `config/translatable.php`:
+
+```php
+'resolver' => \App\Services\CustomLocaleResolver::class,
+```
+
+Or set locales dynamically:
+
+```php
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
+
+$resolver = app(LocaleResolver::class);
+$resolver->setLocales(['de', 'en', 'fr']);
+
+// Now queries will use this locale chain
+$products = Product::withTranslations()->get();
 ```
 
 ### Working with Translation Data
@@ -220,56 +249,68 @@ if ($product->hasTranslation('title', 'de')) {
     echo "German translation available";
 }
 
-// Get specific translation object
-$translation = $product->getTranslation('title', 'de');
-echo $translation->text; // "Deutsches Produkt"
+// Get specific translation (returns translated text)
+$translation = $product->getTranslation('title', 'en');
+echo $translation; // "English Product"
+
+// Get translations for specific locales
+$translations = $product->getTranslations('title', ['en', 'de']);
+// ['en' => 'English Product', 'de' => 'Deutsches Produkt']
 
 // Get all translations for a key
-$titleTranslations = $product->getTranslations('title');
+$allTitles = $product->getAllTranslations('title');
+// ['en' => 'English Product', 'de' => 'Deutsches Produkt', 'fr' => 'Produit Français']
 
-// Get all translations for a locale
-$germanTranslations = $product->getTranslations(null, 'de');
-
-// Get all translations
-$allTranslations = $product->getTranslations();
+// Access the translations relationship
+$translationModels = $product->translations;
+foreach ($translationModels as $translation) {
+    echo "{$translation->locale}: {$translation->key} = {$translation->text}";
+}
 ```
 
 ### Performance Features
 
-- **Automatic Query Optimization**: Efficient subqueries with proper locale priority
-- **Index-Friendly Queries**: Uses `whereIn()` for better database performance
-- **Fallback Chain Caching**: Locale priorities calculated once per query
-- **Smart Column Selection**: Only translated fields are overridden
+- **Efficient Eager Loading**: Use `withTranslations()` to eager load translations and avoid N+1 queries
+- **Optimized Subqueries**: Order by translation uses database-agnostic subqueries
+- **Index-Friendly Queries**: Uses `whereIn()` and `whereColumn()` for better database performance
+- **Cached Locale Resolution**: Locale chain resolved once per request
+- **Translation Map Indexing**: O(1) attribute access after initial load
 
 ## Configuration Examples
 
 ### E-commerce Setup
 ```php
-// config/translatable.php
-'locale_chain' => ['de', 'en', 'fr', 'es']
-
 // Product.php
-public function getTranslatableFallback(): array
+class Product extends Model
 {
-    return ['en', 'de']; // Products: English → German
+    use HasTranslations;
+
+    protected $translatable = ['title', 'description', 'features'];
 }
 
 // Category.php
-public function getTranslatableFallback(): array
+class Category extends Model
 {
-    return ['de', 'en', 'fr']; // Categories: German → English → French
+    use HasTranslations;
+
+    protected $translatable = ['name', 'description'];
 }
 ```
 
 ### Multi-Region Content
 ```php
-// config/translatable.php
-'locale_chain' => ['en', 'fr', 'de']
-
 // Article.php
-public static function translatedKeys(): array
+class Article extends Model
 {
-    return ['title', 'content', 'excerpt', 'meta_description'];
+    use HasTranslations;
+
+    protected $translatable = ['title', 'content', 'excerpt', 'meta_description'];
+
+    // Disable auto-translation for this model if needed
+    protected function autoTranslateAttributes(): bool
+    {
+        return false;
+    }
 }
 ```
 
@@ -280,8 +321,10 @@ public static function translatedKeys(): array
 | Method | Description | Parameters |
 |--------|-------------|------------|
 | `setTranslation($key, $value, $locale)` | Set translation for a field | `string $key`, `string $value`, `?string $locale` |
-| `getTranslation($key, $locale)` | Get translation object | `string $key`, `?string $locale` |
-| `getTranslations($key, $locale)` | Get translation collection | `?string $key`, `?string $locale` |
+| `setTranslations($translations, $locale)` | Set multiple translations at once | `array $translations`, `?string $locale` |
+| `getTranslation($key, $locales)` | Get translated text with fallback | `string $key`, `string\|array\|null $locales` |
+| `getTranslations($key, $locales)` | Get translations as array | `string $key`, `string\|array\|null $locales` |
+| `getAllTranslations($key)` | Get all translations for a key | `string $key` |
 | `hasTranslation($key, $locale)` | Check if translation exists | `string $key`, `?string $locale` |
 | `getUntranslated($key)` | Get original table value | `string $key` |
 | `translations()` | Get translations relationship | - |
@@ -290,35 +333,38 @@ public static function translatedKeys(): array
 
 | Method | Description | Parameters |
 |--------|-------------|------------|
-| `withoutTranslations()` | Disable translation overrides | - |
-| `orderByTranslation($key, $locale, $direction)` | Order by translated field | `string $key`, `?string $locale`, `string $direction` |
-| `searchByTranslation($key, $search, $locale, $operator)` | Search in translations | `string\|array $key`, `string $search`, `?string $locale`, `string $operator` |
-| `searchByTranslationExact($key, $search, $locale)` | Exact match search | `string\|array $key`, `string $search`, `?string $locale` |
-| `searchByTranslationStartsWith($key, $search, $locale)` | Prefix search | `string\|array $key`, `string $search`, `?string $locale` |
-| `searchByTranslationEndsWith($key, $search, $locale)` | Suffix search | `string\|array $key`, `string $search`, `?string $locale` |
+| `withTranslations($locales)` | Eager load translations | `?array $locales` |
+| `searchByTranslation($key, $search, $locales, $operator)` | Search in translations | `string\|array $key`, `string $search`, `string\|array\|null $locales`, `string $operator` |
+| `searchByTranslationExact($key, $search, $locales)` | Exact match search | `string\|array $key`, `string $search`, `string\|array\|null $locales` |
+| `searchByTranslationStartsWith($key, $search, $locales)` | Prefix search | `string\|array $key`, `string $search`, `string\|array\|null $locales` |
+| `searchByTranslationEndsWith($key, $search, $locales)` | Suffix search | `string\|array $key`, `string $search`, `string\|array\|null $locales` |
+| `whereHasTranslation($key, $locales)` | Filter models with translation | `string $key`, `string\|array\|null $locales` |
+| `whereTranslation($key, $value, $locales, $operator)` | Filter by translation value | `string $key`, `string $value`, `string\|array\|null $locales`, `string $operator` |
+| `orderByTranslation($key, $direction)` | Order by translated field | `string $key`, `string $direction` |
 
-### Required Implementation
+### Required Configuration
 
-Models using `HasTranslations` must implement:
+Models using `HasTranslations` must define translatable fields:
 
 ```php
-public static function translatedKeys(): array
+// Property approach (recommended)
+protected $translatable = ['title', 'description'];
+
+// Or method approach (for backwards compatibility)
+public function translatedKeys(): array
 {
-    return ['field1', 'field2']; // Array of translatable column names
+    return ['title', 'description'];
 }
 ```
 
-### Optional Configuration Methods
+### Optional Configuration
 
 ```php
-// Method approach - returns array of fallback locales
-public function getTranslatableFallback(): array
+// Disable auto-translation for specific model
+protected function autoTranslateAttributes(): bool
 {
-    return ['de', 'en', 'fr'];
+    return false;
 }
-
-// Property approach - same functionality
-protected $translatableFallback = ['de', 'en', 'fr'];
 ```
 
 ## IDE Support

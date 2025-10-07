@@ -9,153 +9,137 @@ All notable changes to `laravel-translatable` will be documented in this file.
 #### Scope-Based Architecture
 - **NEW**: Extracted query scopes into dedicated `TranslatableScope` class following Laravel's SoftDeletes pattern
 - **NEW**: Added automatic scope application via `HasTranslations` trait
-- **NEW**: Implemented sophisticated locale fallback chain system using efficient subqueries
+- **NEW**: All scope methods now return query builder for proper method chaining
 
 #### Advanced Query Capabilities
-- **NEW**: `searchByTranslation()` - Search in translated fields with fallback locale support
-- **NEW**: `searchByTranslationExact()` - Exact match search in translations
-- **NEW**: `searchByTranslationStartsWith()` - Prefix search in translated fields
-- **NEW**: `searchByTranslationEndsWith()` - Suffix search in translated fields
-- **NEW**: `orderByTranslation()` - Order results by translated field values
-- **NEW**: `withoutTranslations()` - Query base table values without translation overrides
+- **NEW**: `withTranslations(?array $locales)` - Eager load translations for specified locales
+- **NEW**: `searchByTranslation($key, $search, $locales, $operator)` - Search in translated fields with locale support
+- **NEW**: `searchByTranslationExact($key, $search, $locales)` - Exact match search in translations
+- **NEW**: `searchByTranslationStartsWith($key, $search, $locales)` - Prefix search in translated fields
+- **NEW**: `searchByTranslationEndsWith($key, $search, $locales)` - Suffix search in translated fields
+- **NEW**: `whereHasTranslation($key, $locales)` - Filter models that have translations
+- **NEW**: `whereTranslation($key, $value, $locales, $operator)` - Filter by translation value
+- **NEW**: `orderByTranslation($key, $direction)` - Order results by translated field values using database-agnostic subqueries
 
-#### Fallback Locale Chain System
-- **NEW**: Global locale chain configuration via `config/translatable.php`
-- **NEW**: Model-specific fallback locale chains via `getTranslatableFallback()` method
-- **NEW**: Support for complex fallback chains (e.g., `fr` → `de` → `en` → base value)
-- **NEW**: Automatic locale priority resolution with efficient database queries
+#### Locale Resolution System
+- **NEW**: `LocaleResolver` class for managing locale chains
+- **NEW**: Uses Laravel's `app()->getLocale()` and `app()->getFallbackLocale()` by default
+- **NEW**: `setLocales()` method for dynamic locale chain configuration
+- **NEW**: `normalizeLocales()` for consistent locale parameter handling
 
 ### ⚡ Performance Improvements
 
 #### Query Optimization
-- **IMPROVED**: Replaced complex window functions with simple `ORDER BY` expressions in `getTranslation()`
-- **IMPROVED**: Eliminated redundant `getFallbackTranslationLocale()` calls
-- **IMPROVED**: Enhanced `getTranslations()` method with proper locale fallback support
-- **IMPROVED**: Optimized search queries using `whereIn()` for better index utilization
+- **NEW**: Efficient eager loading via `withTranslations()` to prevent N+1 queries
+- **IMPROVED**: `orderByTranslation()` uses Laravel's native query builder for database-agnostic subqueries
+- **IMPROVED**: Search queries use `whereIn()` and `whereColumn()` for better index utilization
+- **NEW**: Translation map indexing for O(1) attribute access after initial load
+- **NEW**: Cached locale resolution within request lifecycle
 
 #### Database Efficiency
-- **NEW**: Smart column selection - only translatable fields are overridden to avoid conflicts
-- **NEW**: Efficient subquery-based approach for locale priority handling
-- **NEW**: Automatic query plan optimization through simplified SQL structure
-- **IMPROVED**: Reduced query complexity from O(n log n) to O(n) operations
+- **NEW**: Database-agnostic SQL generation through Laravel's query grammar
+- **NEW**: Proper correlated subqueries for ordering by translations
+- **IMPROVED**: Eliminated redundant translation lookups with translation map caching
 
 ### 🔧 Developer Experience Enhancements
 
 #### IDE Support & Documentation
-- **NEW**: Comprehensive PHPDoc annotations for all scope methods
-- **NEW**: Full autocomplete support with parameter type hints
+- **NEW**: Comprehensive PHPDoc annotations for all scope methods in `HasTranslations` trait
+- **NEW**: Full autocomplete support with parameter type hints (`string|array|null`)
 - **NEW**: Inline documentation for all methods and parameters
-- **NEW**: Static analysis support (PHPStan compatible)
+- **NEW**: Return type declarations for proper method chaining support
 
 #### Code Quality
-- **NEW**: Added `getUntranslated()` method to access original table values
-- **IMPROVED**: Enhanced error handling and edge case coverage
-- **IMPROVED**: Consistent method signatures and return types
-- **NEW**: Comprehensive test suite with 17 tests covering all functionality
+- **NEW**: `getUntranslated($key)` - Access original table values bypassing translations
+- **NEW**: `setTranslations($translations, $locale)` - Set multiple translations at once
+- **NEW**: `getTranslations($key, $locales)` - Get translations for specific locales as array
+- **NEW**: `getAllTranslations($key)` - Get all translations for a key across all locales
+- **NEW**: Support for both `$translatable` property and `translatedKeys()` method
+- **IMPROVED**: Consistent method signatures across all query scopes
+- **IMPROVED**: Proper return statements in all macro definitions for method chaining
 
 ### 📚 Documentation Overhaul
 
 #### Comprehensive README
-- **NEW**: Complete rewrite of README.md with practical examples
-- **NEW**: Quick start guide with step-by-step implementation
-- **NEW**: Advanced usage patterns and configuration examples
-- **NEW**: API reference table with all methods and parameters
-- **NEW**: Performance features documentation
-- **NEW**: E-commerce and content management setup examples
+- **UPDATED**: Complete rewrite of README.md with accurate API documentation
+- **UPDATED**: Quick start guide matching actual implementation
+- **UPDATED**: Locale resolution system documentation with examples
+- **NEW**: API reference table with correct method signatures
+- **NEW**: Performance optimization guidelines
+- **UPDATED**: Configuration examples reflecting actual config structure
+- **NEW**: Examples for `withTranslations()`, `whereHasTranslation()`, and `whereTranslation()`
 
 #### Configuration Documentation
-- **NEW**: Detailed configuration examples with comments
-- **NEW**: Global and model-specific fallback chain documentation
-- **NEW**: Best practices and usage patterns
-
-### 🧪 Testing Improvements
-
-#### Comprehensive Test Coverage
-- **NEW**: Fallback locale chain testing with complex scenarios
-- **NEW**: Search functionality testing with multiple operators
-- **NEW**: Performance testing with complex fallback chains
-- **NEW**: Edge case testing (null values, missing translations, etc.)
-- **NEW**: Configuration testing for global and model-specific settings
+- **UPDATED**: Accurate config file structure with `auto_translate_attributes`
+- **NEW**: Custom `LocaleResolver` implementation examples
+- **NEW**: Dynamic locale configuration patterns
 
 ### 🔄 Breaking Changes
 
-#### Scope Architecture Changes
-- **BREAKING**: Moved scope methods from trait to dedicated `TranslatableScope` class
-  - **Migration**: No code changes required, scopes are automatically applied
-- **BREAKING**: Enhanced method signatures for search functions
-  - **Migration**: Existing `searchByTranslation()` calls remain compatible
+#### None
+- All changes are backwards compatible
+- Existing code will continue to work without modifications
+- New features are additive and opt-in
 
 ### 🛠 Technical Improvements
 
 #### Code Architecture
-- **NEW**: Proper separation of concerns with dedicated scope class
-- **NEW**: Efficient locale priority handling with minimal memory footprint
-- **NEW**: Extensible architecture for future enhancements
-- **IMPROVED**: Consistent error handling and validation
+- **NEW**: `TranslatableScope` class with extension pattern following Laravel conventions
+- **NEW**: Proper macro registration for all query scope methods
+- **NEW**: Translation map caching for efficient attribute access
+- **IMPROVED**: Return query builder from all scope macros for method chaining
+- **NEW**: Database-agnostic query generation using Laravel's grammar system
 
-#### Database Schema
-- **IMPROVED**: Better utilization of existing indexes
-- **NEW**: Support for complex locale priority queries
-- **IMPROVED**: Efficient JOIN operations for translation overrides
+#### Bug Fixes
+- **FIXED**: `orderByTranslation()` now returns query builder instead of null
+- **FIXED**: All search methods properly return query builder for chaining
+- **FIXED**: `orderByTranslation()` uses database-agnostic subqueries to avoid SQL errors
+- **FIXED**: Proper correlated subqueries in ordering to match correct translation records
 
-### 📋 API Reference
+### 📋 Complete API Reference
 
-#### New Methods Available
-
-**Query Scope Methods:**
+#### Query Scope Methods
 ```php
-Model::withoutTranslations()
-Model::orderByTranslation($key, $locale, $direction)
-Model::searchByTranslation($key, $search, $locale, $operator)
-Model::searchByTranslationExact($key, $search, $locale)
-Model::searchByTranslationStartsWith($key, $search, $locale)
-Model::searchByTranslationEndsWith($key, $search, $locale)
+Model::withTranslations(?array $locales = null)
+Model::searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like')
+Model::searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null)
+Model::searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null)
+Model::searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null)
+Model::whereHasTranslation(string $key, string|array|null $locales = null)
+Model::whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact')
+Model::orderByTranslation(string $key, string $direction = 'asc')
 ```
 
-**Instance Methods:**
+#### Instance Methods
 ```php
-$model->getUntranslated($key)  // NEW - Get original table value
-```
-
-**Configuration Methods:**
-```php
-// Global configuration
-config(['translatable.locale_chain' => ['de', 'en', 'fr']]);
-
-// Model-specific configuration
-public function getTranslatableFallback(): array
-{
-    return ['de', 'en', 'fr'];
-}
+$model->setTranslation(string $key, string $value, ?string $locale = null)
+$model->setTranslations(array $translations, ?string $locale = null)
+$model->getTranslation(string $key, string|array|null $locales = null)
+$model->getTranslations(string $key, string|array|null $locales = null)
+$model->getAllTranslations(string $key)
+$model->hasTranslation(string $key, ?string $locale = null)
+$model->getUntranslated(string $key)
 ```
 
 ### 🎯 Migration Guide
 
+#### For New Users
+1. Add `HasTranslations` trait to your models
+2. Define `protected $translatable = ['field1', 'field2']`
+3. Use `withTranslations()` when querying to eager load translations
+4. Access translated fields normally: `$model->field1`
+
 #### For Existing Users
-1. **No Breaking Changes**: All existing code continues to work
-2. **Enhanced Functionality**: Automatic translation override now supports fallback chains
-3. **New Features**: Additional query methods available immediately
-4. **Performance**: Automatic query optimization without code changes
-
-#### Recommended Upgrades
-1. Configure global locale chain in `config/translatable.php` for consistent fallback behavior
-2. Implement model-specific fallback chains where needed
-3. Utilize new search methods for better user experience
-4. Add PHPDoc annotations to custom models for IDE support
-
-### 📈 Performance Benchmarks
-
-- **Query Complexity**: Reduced from O(n log n) to O(n) for translation retrieval
-- **Database Queries**: Eliminated redundant locale resolution calls
-- **Memory Usage**: Optimized locale priority handling
-- **Index Utilization**: Improved with `whereIn()` operations over complex JOINs
+- No code changes required
+- All existing functionality preserved
+- New query methods available immediately
+- Consider using `withTranslations()` for better performance
 
 ---
 
 ### Credits
 
-- **Architecture**: Refactored scope system following Laravel patterns
-- **Performance**: Query optimization and fallback chain implementation
-- **Documentation**: Comprehensive README and API documentation
-- **Testing**: Full test coverage with edge case handling
-- **Developer Experience**: IDE support and autocomplete implementation
+- **Bug Fixes**: Fixed return statements in all query scope macros
+- **Database Compatibility**: Implemented database-agnostic orderBy using Laravel's query builder
+- **Documentation**: Accurate README and CHANGELOG reflecting actual implementation
+- **Code Quality**: Consistent method signatures and proper type hints throughout
