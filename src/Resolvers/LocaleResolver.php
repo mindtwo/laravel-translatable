@@ -4,21 +4,36 @@ namespace mindtwo\LaravelTranslatable\Resolvers;
 
 class LocaleResolver
 {
-    public function resolve(?string $locale = null): string
+    protected ?array $locales = null;
+
+    public function getLocales(): array
     {
-        if (! is_null($locale)) {
-            return $locale;
+        if ($this->locales !== null) {
+            return $this->locales;
         }
 
-        return app()->getLocale();
+        return [
+            app()->getLocale(),
+            app()->getFallbackLocale(),
+        ];
     }
 
-    public function resolveFallback(?string $locale = null): string
+    public function setLocales(array $locales): self
     {
-        if (! is_null($locale)) {
-            return $locale;
+        $this->locales = $locales;
+
+        return $this;
+    }
+
+    /**
+     * Normalize locale parameter to array format.
+     */
+    public function normalizeLocales(string|array|null $locales): array
+    {
+        if (is_null($locales)) {
+            return $this->getLocales();
         }
 
-        return app()->getFallbackLocale();
+        return is_array($locales) ? $locales : [$locales];
     }
 }

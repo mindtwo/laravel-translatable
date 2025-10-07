@@ -22,18 +22,10 @@ class Translatable extends Model
 {
     use AutoCreateUuid;
 
-    /**
-     * The attributes that aren't mass assignable.
-     *
-     * @var array<string>|bool
-     */
+    /** {@inheritDoc} */
     protected $guarded = [];
 
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
+    /** {@inheritDoc} */
     protected $table = 'translatable';
 
     /**

@@ -10,11 +10,10 @@ return new class extends Migration
     {
         Schema::create('test_models', function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
-        });
-
-        Schema::create('test_model_with_translations', function (Blueprint $table) {
-            $table->id();
+            $table->string('title')->nullable();
+            $table->text('description')->nullable();
+            $table->string('name')->nullable();
+            $table->integer('priority')->default(0);
             $table->timestamps();
         });
     }
@@ -25,6 +24,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('test_model');
-        Schema::dropIfExists('test_model_with_translations');
     }
 };
