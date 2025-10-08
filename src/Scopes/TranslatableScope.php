@@ -85,7 +85,8 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string|array $key,
             string $search,
             string|array|null $locales = null,
-            string $operator = 'like'
+            string $operator = 'like',
+            string $boolean = 'and',
         ) {
             $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
 
@@ -97,23 +98,27 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
                 default => "%{$search}%"
             };
 
+            // Ensure boolean is either 'and' or 'or'
+            if (! in_array(strtolower($boolean), ['and', 'or'])) {
+                $boolean = 'and';
+            }
+            $boolean = strtolower($boolean);
+
+            // Comparison operator based on the search type
             $comparison = $operator === 'exact' ? '=' : 'like';
 
-            if (is_array($key)) {
-                $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
+            return $query->has(
+                relation: 'translations',
+                boolean: $boolean,
+                callback: function ($q) use ($key, $searchValue, $localePriority, $comparison) {
                     $q->whereIn('locale', $localePriority)
-                        ->whereIn('key', $key)
+                        ->when(
+                            is_array($key),
+                            fn ($q) => $q->whereIn('key', $key),
+                            fn ($q) => $q->where('key', $key)
+                        )
                         ->where('text', $comparison, $searchValue);
                 });
-            } else {
-                $query->whereHas('translations', function ($q) use ($key, $searchValue, $localePriority, $comparison) {
-                    $q->where('key', $key)
-                        ->whereIn('locale', $localePriority)
-                        ->where('text', $comparison, $searchValue);
-                });
-            }
-
-            return $query;
         });
 
         // Add additional macros for exact, starts_with, and ends_with searches
@@ -121,27 +126,30 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             Builder $query,
             string|array $key,
             string $search,
-            string|array|null $locales = null
+            string|array|null $locales = null,
+            string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'exact');
+            return $query->searchByTranslation($key, $search, $locales, 'exact', $boolean);
         });
 
         $builder->macro('searchByTranslationStartsWith', function (
             Builder $query,
             string|array $key,
             string $search,
-            string|array|null $locales = null
+            string|array|null $locales = null,
+            string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'starts_with');
+            return $query->searchByTranslation($key, $search, $locales, 'starts_with', $boolean);
         });
 
         $builder->macro('searchByTranslationEndsWith', function (
             Builder $query,
             string|array $key,
             string $search,
-            string|array|null $locales = null
+            string|array|null $locales = null,
+            string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'ends_with');
+            return $query->searchByTranslation($key, $search, $locales, 'ends_with', $boolean);
         });
     }
 
@@ -155,17 +163,20 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
         $builder->macro('whereHasTranslation', function (
             Builder $query,
             string $key,
-            string|array|null $locales = null
+            string|array|null $locales = null,
+            string $boolean = 'and'
         ) {
 
             $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
 
-            $query->whereHas('translations', function ($q) use ($key, $localePriority) {
-                $q->where('key', $key)
-                    ->whereIn('locale', $localePriority);
-            });
-
-            return $query;
+            return $query->has(
+                relation: 'translations',
+                boolean: $boolean,
+                callback: function ($q) use ($key, $localePriority) {
+                    $q->where('key', $key)
+                        ->whereIn('locale', $localePriority);
+                }
+            );
         });
 
     }
