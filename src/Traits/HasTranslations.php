@@ -50,13 +50,8 @@ trait HasTranslations
      */
     protected static function bootHasTranslations(): void
     {
-
         // Register the TranslatableScope automatically
         static::addGlobalScope(new TranslatableScope);
-
-        static::retrieved(function ($model) {
-            $model->indexTranslations();
-        });
     }
 
     /**
@@ -76,6 +71,16 @@ trait HasTranslations
         }
 
         foreach ($locales as $locale) {
+            if ($locale === $this->defaultLocaleOnModel()) {
+                $value = parent::getAttribute($key);
+
+                if ($value !== null) {
+                    return $value;
+                }
+
+                continue;
+            }
+
             $this->ensureLocaleLoaded($locale);
 
             if (isset($this->translationsMap[$locale][$key])) {
@@ -124,7 +129,6 @@ trait HasTranslations
      */
     public function getTranslations(string $key, string|array|null $locales = null): array
     {
-
         $locales = $this->getResolvedLocales($locales);
 
         if (count($locales) === 0) {
@@ -139,6 +143,12 @@ trait HasTranslations
         $translations = [];
 
         foreach ($locales as $locale) {
+            if ($locale === $this->defaultLocaleOnModel()) {
+                $translations[$locale] = parent::getAttribute($key);
+
+                continue;
+            }
+
             $this->ensureLocaleLoaded($locale);
 
             if (isset($this->translationsMap[$locale][$key])) {
@@ -228,7 +238,7 @@ trait HasTranslations
     /**
      * Build an optimized index of translations for O(1) attribute access.
      */
-    protected function indexTranslations(): void
+    public function indexTranslations(): void
     {
         if ($this->relationLoaded('translations')) {
             $this->translationsMap = [];
@@ -241,6 +251,15 @@ trait HasTranslations
         }
 
         $this->translationsMap = [];
+    }
+
+    public function defaultLocaleOnModel(): ?string
+    {
+        if (config('translatable.default_locale_on_model')) {
+            return resolve(LocaleResolver::class)->getDefaultLocale();
+        }
+
+        return null;
     }
 
     /**

@@ -6,6 +6,8 @@ class LocaleResolver
 {
     protected ?array $locales = null;
 
+    protected ?string $defaultLocale = null;
+
     public function getLocales(): array
     {
         if ($this->locales !== null) {
@@ -16,6 +18,22 @@ class LocaleResolver
             app()->getLocale(),
             app()->getFallbackLocale(),
         ];
+    }
+
+    public function getDefaultLocale(): string
+    {
+        if ($this->defaultLocale !== null) {
+            return $this->defaultLocale;
+        }
+
+        return app()->getFallbackLocale();
+    }
+
+    public function setDefaultLocale(string $defaultLocale): static
+    {
+        $this->defaultLocale = $defaultLocale;
+
+        return $this;
     }
 
     public function setLocales(array $locales): self
