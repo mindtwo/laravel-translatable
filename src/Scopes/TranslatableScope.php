@@ -69,7 +69,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 
             return $query->with([
                 'translations' => fn (MorphMany $q) => $q->whereIn('locale', $locales),
-            ]);
+            ])->afterQuery(fn ($results) => $results->each(fn ($result) => $result->addLoadedLocales($locales)));
         });
 
     }

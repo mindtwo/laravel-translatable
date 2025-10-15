@@ -35,6 +35,8 @@ trait HasTranslations
 
     protected ?array $translationsMap = null;
 
+    protected array $loadedLocales = [];
+
     protected ?array $cachedTranslatableAttributes = null;
 
     /**
@@ -262,6 +264,13 @@ trait HasTranslations
         return null;
     }
 
+    public function addLoadedLocales(array $locales): void
+    {
+        foreach ($locales as $locale) {
+            $this->loadedLocales[$locale] = true;
+        }
+    }
+
     /**
      * Get the locale fallback chain for this model.
      */
@@ -327,6 +336,11 @@ trait HasTranslations
             return;
         }
 
+        // Do not attempt to load locale multiple times if no results are found
+        if (isset($this->loadedLocales[$locale])) {
+            return;
+        }
+
         $translations = $this->translations()
             ->where('locale', $locale)
             ->get();
@@ -338,6 +352,8 @@ trait HasTranslations
         foreach ($translations as $translation) {
             $this->translationsMap[$locale][$translation->key] = $translation->text;
         }
+
+        $this->loadedLocales[$locale] = true;
 
         if ($this->relationLoaded('translations')) {
             $this->setRelation('translations', $this->translations->merge($translations));
