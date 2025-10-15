@@ -35,6 +35,8 @@ trait HasTranslations
 
     protected ?array $translationsMap = null;
 
+    protected array $loadedLocales = [];
+
     protected ?array $cachedTranslatableAttributes = null;
 
     /**
@@ -50,13 +52,8 @@ trait HasTranslations
      */
     protected static function bootHasTranslations(): void
     {
-
         // Register the TranslatableScope automatically
         static::addGlobalScope(new TranslatableScope);
-
-        static::retrieved(function ($model) {
-            $model->indexTranslations();
-        });
     }
 
     /**
@@ -76,6 +73,16 @@ trait HasTranslations
         }
 
         foreach ($locales as $locale) {
+            if ($locale === $this->defaultLocaleOnModel()) {
+                $value = parent::getAttribute($key);
+
+                if ($value !== null) {
+                    return $value;
+                }
+
+                continue;
+            }
+
             $this->ensureLocaleLoaded($locale);
 
             if (isset($this->translationsMap[$locale][$key])) {
@@ -124,7 +131,6 @@ trait HasTranslations
      */
     public function getTranslations(string $key, string|array|null $locales = null): array
     {
-
         $locales = $this->getResolvedLocales($locales);
 
         if (count($locales) === 0) {
@@ -139,6 +145,12 @@ trait HasTranslations
         $translations = [];
 
         foreach ($locales as $locale) {
+            if ($locale === $this->defaultLocaleOnModel()) {
+                $translations[$locale] = parent::getAttribute($key);
+
+                continue;
+            }
+
             $this->ensureLocaleLoaded($locale);
 
             if (isset($this->translationsMap[$locale][$key])) {
@@ -228,7 +240,7 @@ trait HasTranslations
     /**
      * Build an optimized index of translations for O(1) attribute access.
      */
-    protected function indexTranslations(): void
+    public function indexTranslations(): void
     {
         if ($this->relationLoaded('translations')) {
             $this->translationsMap = [];
@@ -241,6 +253,22 @@ trait HasTranslations
         }
 
         $this->translationsMap = [];
+    }
+
+    public function defaultLocaleOnModel(): ?string
+    {
+        if (config('translatable.default_locale_on_model')) {
+            return resolve(LocaleResolver::class)->getDefaultLocale();
+        }
+
+        return null;
+    }
+
+    public function addLoadedLocales(array $locales): void
+    {
+        foreach ($locales as $locale) {
+            $this->loadedLocales[$locale] = true;
+        }
     }
 
     /**
@@ -308,6 +336,11 @@ trait HasTranslations
             return;
         }
 
+        // Do not attempt to load locale multiple times if no results are found
+        if (isset($this->loadedLocales[$locale])) {
+            return;
+        }
+
         $translations = $this->translations()
             ->where('locale', $locale)
             ->get();
@@ -319,6 +352,8 @@ trait HasTranslations
         foreach ($translations as $translation) {
             $this->translationsMap[$locale][$translation->key] = $translation->text;
         }
+
+        $this->loadedLocales[$locale] = true;
 
         if ($this->relationLoaded('translations')) {
             $this->setRelation('translations', $this->translations->merge($translations));

@@ -3,6 +3,7 @@
 namespace mindtwo\LaravelTranslatable\Scopes;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
 /**
@@ -67,8 +68,8 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             }
 
             return $query->with([
-                'translations' => fn (Builder $q) => $q->whereIn('locale', $locales),
-            ]);
+                'translations' => fn (MorphMany $q) => $q->whereIn('locale', $locales),
+            ])->afterQuery(fn ($results) => $results->each(fn ($result) => $result->addLoadedLocales($locales)));
         });
 
     }
