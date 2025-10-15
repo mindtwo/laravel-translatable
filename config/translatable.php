@@ -4,7 +4,24 @@ use mindtwo\LaravelTranslatable\Models\Translatable;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Translatable Model
+    |--------------------------------------------------------------------------
+    |
+    | The model class to use for storing translations.
+    |
+    */
     'model' => Translatable::class,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Locale Resolver
+    |--------------------------------------------------------------------------
+    |
+    | The resolver class to use for determining locale fallback chains.
+    |
+    */
     'resolver' => LocaleResolver::class,
 
     /*

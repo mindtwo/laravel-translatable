@@ -46,6 +46,9 @@ This is the contents of the published config file:
 ```php
 <?php
 
+use mindtwo\LaravelTranslatable\Models\Translatable;
+use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -55,7 +58,7 @@ return [
     | The model class to use for storing translations.
     |
     */
-    'model' => \mindtwo\LaravelTranslatable\Models\Translatable::class,
+    'model' => Translatable::class,
 
     /*
     |--------------------------------------------------------------------------
@@ -65,7 +68,7 @@ return [
     | The resolver class to use for determining locale fallback chains.
     |
     */
-    'resolver' => \mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class,
+    'resolver' => LocaleResolver::class,
 
     /*
     |--------------------------------------------------------------------------
@@ -78,6 +81,18 @@ return [
     |
     */
     'auto_translate_attributes' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default Locale on Model
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, the default locale returned by the locale resolver is considered
+    | to be stored on the model itself, i.e. not available in the translatable table
+    | but stored directly in fields in the model table.
+    |
+    */
+    'default_locale_on_model' => false,
 ];
 ```
 
