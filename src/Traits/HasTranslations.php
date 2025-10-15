@@ -19,11 +19,11 @@ use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
  * @property-read int|null $translations_count
  *
  * @method static Builder<static>|static withTranslations(?array $locales = null) Eager load translations for specified locales (or default locale chain)
- * @method static Builder<static>|static searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like') Search in translated fields with locale fallback support
- * @method static Builder<static>|static searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null) Search for exact matches in translated fields
- * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that start with the given text
- * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null) Search for translated fields that end with the given text
- * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null) Filter models that have a translation for the given key and locale(s)
+ * @method static Builder<static>|static searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like', string $boolean = 'and') Search in translated fields with locale fallback support
+ * @method static Builder<static>|static searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for exact matches in translated fields
+ * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for translated fields that start with the given text
+ * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for translated fields that end with the given text
+ * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null, string $boolean = 'and') Filter models that have a translation for the given key and locale(s)
  * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact') Filter models where translation matches a specific value
  * @method static Builder<static>|static orderByTranslation(string $key, string $direction = 'asc') Order by translated field values
  *
