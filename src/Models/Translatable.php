@@ -30,6 +30,8 @@ class Translatable extends Model
 
     /**
      * Get the parent translatable model.
+     *
+     * @return MorphTo<Model, $this>
      */
     public function translatable(): MorphTo
     {
