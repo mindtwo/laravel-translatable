@@ -13,8 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Dev tooling ranges widened to Pest 3/4, Testbench 8/9/10/11, Larastan 2/3 and PHPStan 1/2.
-- CI matrix expanded to test Laravel 10, 11, 12 and 13 against PHP 8.2–8.5, excluding incompatible combinations.
+- Dev tooling ranges widened to Pest 3/4, Testbench 9/10/11, Larastan 2/3 and PHPStan 1/2.
+- CI matrix expanded to test Laravel 11, 12 and 13 against PHP 8.2–8.5, excluding incompatible combinations. Laravel 10 is no longer exercised in CI because `pestphp/pest-plugin-laravel` v3 requires Laravel 11+ and v4 requires PHP 8.3+; runtime support for L10 stays via `^10.18` in `composer.json` (consumers do not install the package's dev dependencies).
 - `composer test` now passes `--no-coverage` so Pest 4 + PHPUnit 12 do not trip `failOnWarning` without a coverage driver.
 - `TranslatableScope` no longer relies on macro-from-macro calls — the search logic moved into a static `applySearchByTranslation()` method, and the `Builder::with()` closure no longer narrows `Relation` to `MorphMany`.
 - Source docblocks aligned with the Laravel framework conventions.
