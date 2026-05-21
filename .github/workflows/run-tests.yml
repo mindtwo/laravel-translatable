@@ -10,14 +10,31 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest]
-        php: [8.4, 8.3]
-        laravel: [12.*, 11.*]
+        php: [8.5, 8.4, 8.3, 8.2]
+        laravel: [13.*, 12.*, 11.*, 10.*]
         stability: [prefer-lowest, prefer-stable]
         include:
+          - laravel: 13.*
+            testbench: 11.*
           - laravel: 12.*
             testbench: 10.*
           - laravel: 11.*
             testbench: 9.*
+          - laravel: 10.*
+            testbench: 8.*
+        exclude:
+          # Laravel 13 requires PHP 8.3+
+          - laravel: 13.*
+            php: 8.2
+          # Laravel 10 supports PHP 8.1-8.3 only
+          - laravel: 10.*
+            php: 8.4
+          - laravel: 10.*
+            php: 8.5
+          # PHP 8.5 on Windows: shivammathur/setup-php coverage on Windows can lag;
+          # drop this exclude once verified green.
+          - php: 8.5
+            os: windows-latest
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
@@ -46,4 +63,4 @@ jobs:
         run: composer show -D
 
       - name: Execute tests
-        run: vendor/bin/pest --ci
+        run: vendor/bin/pest --ci --no-coverage

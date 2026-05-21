@@ -2,6 +2,18 @@
 
 All notable changes to `laravel-translatable` will be documented in this file.
 
+## 2.2.0 - 2026-05-21
+
+### Added
+- Support for Laravel 13 (`illuminate/contracts` and `illuminate/database` now allow `^13.0`).
+- Support for PHP 8.5.
+- Dev tooling now ranges across Pest 3/4, Testbench 8/9/10/11, Larastan 2/3, PHPStan 1/2.
+- CI matrix expanded to test Laravel 10, 11, 12 and 13 against PHP 8.2–8.5 (excluding incompatible combinations).
+
+### Notes
+- No source code changes were required — all APIs used by the package (`Scope`, `morphMany`/`morphTo`, global scopes, query macros, schema builder, locale helpers) are stable across Laravel 10–13.
+- Existing users on Laravel 10/11/12 are unaffected; Composer's solver picks the right dependency versions per Laravel version.
+
 ## [Unreleased] - 2024-XX-XX
 
 ### 🎉 Major Features Added
