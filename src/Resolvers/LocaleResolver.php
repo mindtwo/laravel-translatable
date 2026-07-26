@@ -4,10 +4,23 @@ namespace mindtwo\LaravelTranslatable\Resolvers;
 
 class LocaleResolver
 {
+    /**
+     * The resolved locale fallback chain, if overridden.
+     *
+     * @var array<int, string>|null
+     */
     protected ?array $locales = null;
 
+    /**
+     * The default locale, if overridden.
+     */
     protected ?string $defaultLocale = null;
 
+    /**
+     * Get the locale fallback chain.
+     *
+     * @return array<int, string>
+     */
     public function getLocales(): array
     {
         if ($this->locales !== null) {
@@ -20,6 +33,9 @@ class LocaleResolver
         ];
     }
 
+    /**
+     * Get the default locale stored on the model itself.
+     */
     public function getDefaultLocale(): string
     {
         if ($this->defaultLocale !== null) {
@@ -29,6 +45,11 @@ class LocaleResolver
         return app()->getFallbackLocale();
     }
 
+    /**
+     * Set the default locale used for attributes stored on the model itself.
+     *
+     * @return $this
+     */
     public function setDefaultLocale(string $defaultLocale): static
     {
         $this->defaultLocale = $defaultLocale;
@@ -36,6 +57,12 @@ class LocaleResolver
         return $this;
     }
 
+    /**
+     * Set the locale fallback chain.
+     *
+     * @param  array<int, string>  $locales
+     * @return $this
+     */
     public function setLocales(array $locales): self
     {
         $this->locales = $locales;
@@ -44,7 +71,10 @@ class LocaleResolver
     }
 
     /**
-     * Normalize locale parameter to array format.
+     * Normalize a locale argument to an array of locales.
+     *
+     * @param  string|array<int, string>|null  $locales
+     * @return array<int, string>
      */
     public function normalizeLocales(string|array|null $locales): array
     {

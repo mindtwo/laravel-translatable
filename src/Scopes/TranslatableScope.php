@@ -3,7 +3,7 @@
 namespace mindtwo\LaravelTranslatable\Scopes;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Scope;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
 /**
@@ -27,10 +27,12 @@ use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
  *
  * @template TModel of \Illuminate\Database\Eloquent\Model
  */
-class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
+class TranslatableScope implements Scope
 {
     /**
-     * The extensions to be added to the builder.
+     * All of the extensions to be added to the builder.
+     *
+     * @var string[]
      */
     protected $extensions = ['WithTranslations', 'SearchByTranslation', 'WhereHasTranslation', 'WhereTranslation', 'OrderByTranslation'];
 
@@ -42,7 +44,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
     /**
      * Extend the query builder with the needed functions.
      *
-     * @param  Builder<*>  $builder
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      * @return void
      */
     public function extend($builder)
@@ -53,34 +55,32 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
     }
 
     /**
-     * Eager load translations for specified locales.
+     * Add the with-translations extension to the builder.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      */
     public function addWithTranslations(Builder $builder): void
     {
-
         $builder->macro('withTranslations', function (Builder $query, ?array $locales = null) {
-
             $locales = $locales ?? resolve(LocaleResolver::class)->getLocales();
 
             if (count($locales) === 0) {
-                // No locales specified, skip eager loading
                 return $query;
             }
 
             return $query->with([
-                'translations' => fn (MorphMany $q) => $q->whereIn('locale', $locales),
+                'translations' => fn ($q) => $q->whereIn('locale', $locales),
             ])->afterQuery(fn ($results) => $results->each(fn ($result) => $result->addLoadedLocales($locales)));
         });
-
     }
 
     /**
-     * Search for models by translated field value with locale fallback support.
+     * Add the search-by-translation extensions to the builder.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      */
-    public function addSearchByTranslation(
-        Builder $builder,
-    ): void {
-
+    public function addSearchByTranslation(Builder $builder): void
+    {
         $builder->macro('searchByTranslation', function (
             Builder $query,
             string|array $key,
@@ -89,40 +89,9 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string $operator = 'like',
             string $boolean = 'and',
         ) {
-            $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
-
-            $searchValue = match ($operator) {
-                'like' => "%{$search}%",
-                'starts_with' => "{$search}%",
-                'ends_with' => "%{$search}",
-                'exact' => $search,
-                default => "%{$search}%"
-            };
-
-            // Ensure boolean is either 'and' or 'or'
-            if (! in_array(strtolower($boolean), ['and', 'or'])) {
-                $boolean = 'and';
-            }
-            $boolean = strtolower($boolean);
-
-            // Comparison operator based on the search type
-            $comparison = $operator === 'exact' ? '=' : 'like';
-
-            return $query->has(
-                relation: 'translations',
-                boolean: $boolean,
-                callback: function ($q) use ($key, $searchValue, $localePriority, $comparison) {
-                    $q->whereIn('locale', $localePriority)
-                        ->when(
-                            is_array($key),
-                            fn ($q) => $q->whereIn('key', $key),
-                            fn ($q) => $q->where('key', $key)
-                        )
-                        ->where('text', $comparison, $searchValue);
-                });
+            return TranslatableScope::applySearchByTranslation($query, $key, $search, $locales, $operator, $boolean);
         });
 
-        // Add additional macros for exact, starts_with, and ends_with searches
         $builder->macro('searchByTranslationExact', function (
             Builder $query,
             string|array $key,
@@ -130,7 +99,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'exact', $boolean);
+            return TranslatableScope::applySearchByTranslation($query, $key, $search, $locales, 'exact', $boolean);
         });
 
         $builder->macro('searchByTranslationStartsWith', function (
@@ -140,7 +109,7 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'starts_with', $boolean);
+            return TranslatableScope::applySearchByTranslation($query, $key, $search, $locales, 'starts_with', $boolean);
         });
 
         $builder->macro('searchByTranslationEndsWith', function (
@@ -150,24 +119,23 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'ends_with', $boolean);
+            return TranslatableScope::applySearchByTranslation($query, $key, $search, $locales, 'ends_with', $boolean);
         });
     }
 
     /**
-     * Filter models that have a translation for the given key and locale(s).
+     * Add the where-has-translation extension to the builder.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      */
-    public function addWhereHasTranslation(
-        Builder $builder
-    ): void {
-
+    public function addWhereHasTranslation(Builder $builder): void
+    {
         $builder->macro('whereHasTranslation', function (
             Builder $query,
             string $key,
             string|array|null $locales = null,
             string $boolean = 'and'
         ) {
-
             $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
 
             return $query->has(
@@ -179,15 +147,15 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
                 }
             );
         });
-
     }
 
     /**
-     * Filter models where translation matches a specific value.
+     * Add the where-translation extension to the builder.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      */
-    public function addWhereTranslation(
-        Builder $builder
-    ): void {
+    public function addWhereTranslation(Builder $builder): void
+    {
         $builder->macro('whereTranslation', function (
             Builder $query,
             string $key,
@@ -195,16 +163,17 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
             string|array|null $locales = null,
             string $operator = 'exact'
         ) {
-            $query->searchByTranslation($key, $value, $locales, $operator);
+            return TranslatableScope::applySearchByTranslation($query, $key, $value, $locales, $operator, 'and');
         });
     }
 
     /**
-     * Order by translated field values.
+     * Add the order-by-translation extension to the builder.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $builder
      */
-    public function addOrderByTranslation(
-        Builder $builder
-    ): void {
+    public function addOrderByTranslation(Builder $builder): void
+    {
         $builder->macro('orderByTranslation', function (
             Builder $query,
             string $key,
@@ -224,5 +193,52 @@ class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
 
             return $query->orderBy($subQuery, $direction);
         });
+    }
+
+    /**
+     * Apply a translation search constraint to the given query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<*>  $query
+     * @param  string|array<int, string>  $key
+     * @param  string|array<int, string>|null  $locales
+     */
+    public static function applySearchByTranslation(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales,
+        string $operator,
+        string $boolean,
+    ): Builder {
+        $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
+
+        $searchValue = match ($operator) {
+            'like' => "%{$search}%",
+            'starts_with' => "{$search}%",
+            'ends_with' => "%{$search}",
+            'exact' => $search,
+            default => "%{$search}%",
+        };
+
+        if (! in_array(strtolower($boolean), ['and', 'or'])) {
+            $boolean = 'and';
+        }
+
+        $boolean = strtolower($boolean);
+        $comparison = $operator === 'exact' ? '=' : 'like';
+
+        return $query->has(
+            relation: 'translations',
+            boolean: $boolean,
+            callback: function ($q) use ($key, $searchValue, $localePriority, $comparison) {
+                $q->whereIn('locale', $localePriority)
+                    ->when(
+                        is_array($key),
+                        fn ($q) => $q->whereIn('key', $key),
+                        fn ($q) => $q->where('key', $key)
+                    )
+                    ->where('text', $comparison, $searchValue);
+            }
+        );
     }
 }

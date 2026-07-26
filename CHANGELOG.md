@@ -1,151 +1,172 @@
 # Changelog
 
-All notable changes to `laravel-translatable` will be documented in this file.
+All notable changes to `laravel-translatable` are documented in this file.
 
-## [Unreleased] - 2024-XX-XX
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Write API
+## [2.2.0] - 2026-05-21
 
-- **NEW**: `forgetTranslation($key, $locale)` — removes a translation row; for the default locale (with `default_locale_on_model`) it nulls the model attribute instead
-- **CHANGED**: `setTranslation()` accepts `null` to remove a translation
-- **CHANGED**: with `default_locale_on_model` enabled, `setTranslation()`/`setTranslations()` write the default locale to the model attribute (persisted on the next `save()`) instead of creating a translation row that is never read
+### Added
 
-### 🎉 Major Features Added
+- Laravel 13 support — `illuminate/contracts` and `illuminate/database` now allow `^13.0`.
+- PHP 8.5 support.
 
-#### Scope-Based Architecture
-- **NEW**: Extracted query scopes into dedicated `TranslatableScope` class following Laravel's SoftDeletes pattern
-- **NEW**: Added automatic scope application via `HasTranslations` trait
-- **NEW**: All scope methods now return query builder for proper method chaining
+### Changed
 
-#### Advanced Query Capabilities
-- **NEW**: `withTranslations(?array $locales)` - Eager load translations for specified locales
-- **NEW**: `searchByTranslation($key, $search, $locales, $operator)` - Search in translated fields with locale support
-- **NEW**: `searchByTranslationExact($key, $search, $locales)` - Exact match search in translations
-- **NEW**: `searchByTranslationStartsWith($key, $search, $locales)` - Prefix search in translated fields
-- **NEW**: `searchByTranslationEndsWith($key, $search, $locales)` - Suffix search in translated fields
-- **NEW**: `whereHasTranslation($key, $locales)` - Filter models that have translations
-- **NEW**: `whereTranslation($key, $value, $locales, $operator)` - Filter by translation value
-- **NEW**: `orderByTranslation($key, $direction)` - Order results by translated field values using database-agnostic subqueries
+- Dev tooling ranges widened to Pest 3/4, Testbench 9/10/11, Larastan 2/3 and PHPStan 1/2.
+- CI matrix expanded to test Laravel 11, 12 and 13 against PHP 8.2–8.5, excluding incompatible combinations. Laravel 10 is no longer exercised in CI because `pestphp/pest-plugin-laravel` v3 requires Laravel 11+ and v4 requires PHP 8.3+; runtime support for L10 stays via `^10.18` in `composer.json` (consumers do not install the package's dev dependencies).
+- `composer test` now passes `--no-coverage` so Pest 4 + PHPUnit 12 do not trip `failOnWarning` without a coverage driver.
+- `TranslatableScope` no longer relies on macro-from-macro calls — the search logic moved into a static `applySearchByTranslation()` method, and the `Builder::with()` closure no longer narrows `Relation` to `MorphMany`.
+- Source docblocks aligned with the Laravel framework conventions.
 
-#### Locale Resolution System
-- **NEW**: `LocaleResolver` class for managing locale chains
-- **NEW**: Uses Laravel's `app()->getLocale()` and `app()->getFallbackLocale()` by default
-- **NEW**: `setLocales()` method for dynamic locale chain configuration
-- **NEW**: `normalizeLocales()` for consistent locale parameter handling
+### Removed
 
-### ⚡ Performance Improvements
+- The historic `ignoreErrors` block from `phpstan.neon.dist`; the underlying type issues were fixed instead of suppressed.
 
-#### Query Optimization
-- **NEW**: Efficient eager loading via `withTranslations()` to prevent N+1 queries
-- **IMPROVED**: `orderByTranslation()` uses Laravel's native query builder for database-agnostic subqueries
-- **IMPROVED**: Search queries use `whereIn()` and `whereColumn()` for better index utilization
-- **NEW**: Translation map indexing for O(1) attribute access after initial load
-- **NEW**: Cached locale resolution within request lifecycle
+### Notes
 
-#### Database Efficiency
-- **NEW**: Database-agnostic SQL generation through Laravel's query grammar
-- **NEW**: Proper correlated subqueries for ordering by translations
-- **IMPROVED**: Eliminated redundant translation lookups with translation map caching
+- No public API changed. Existing users on Laravel 10/11/12 are unaffected; Composer resolves the appropriate dependency versions per Laravel version.
 
-### 🔧 Developer Experience Enhancements
+## [2.1.0] - 2025-10-15
 
-#### IDE Support & Documentation
-- **NEW**: Comprehensive PHPDoc annotations for all scope methods in `HasTranslations` trait
-- **NEW**: Full autocomplete support with parameter type hints (`string|array|null`)
-- **NEW**: Inline documentation for all methods and parameters
-- **NEW**: Return type declarations for proper method chaining support
+### Added
 
-#### Code Quality
-- **NEW**: `getUntranslated($key)` - Access original table values bypassing translations
-- **NEW**: `setTranslations($translations, $locale)` - Set multiple translations at once
-- **NEW**: `getTranslations($key, $locales)` - Get translations for specific locales as array
-- **NEW**: `getAllTranslations($key)` - Get all translations for a key across all locales
-- **NEW**: Support for both `$translatable` property and `translatedKeys()` method
-- **IMPROVED**: Consistent method signatures across all query scopes
-- **IMPROVED**: Proper return statements in all macro definitions for method chaining
+- Optional `default_locale_on_model` mode: the default locale is read from the model's own columns instead of the translatable table.
+- `$boolean` parameter on the search query macros so they can be combined with `or` clauses.
 
-### 📚 Documentation Overhaul
+### Fixed
 
-#### Comprehensive README
-- **UPDATED**: Complete rewrite of README.md with accurate API documentation
-- **UPDATED**: Quick start guide matching actual implementation
-- **UPDATED**: Locale resolution system documentation with examples
-- **NEW**: API reference table with correct method signatures
-- **NEW**: Performance optimization guidelines
-- **UPDATED**: Configuration examples reflecting actual config structure
-- **NEW**: Examples for `withTranslations()`, `whereHasTranslation()`, and `whereTranslation()`
+- Locales that resolve to no translations are no longer queried more than once per instance.
 
-#### Configuration Documentation
-- **UPDATED**: Accurate config file structure with `auto_translate_attributes`
-- **NEW**: Custom `LocaleResolver` implementation examples
-- **NEW**: Dynamic locale configuration patterns
+## [2.0.0] - 2025-10-07
 
-### 🔄 Breaking Changes
+Major rewrite. Translations are now accessed through Eloquent global scopes and macros instead of model-level overrides.
 
-#### None
-- All changes are backwards compatible
-- Existing code will continue to work without modifications
-- New features are additive and opt-in
+### Added
 
-### 🛠 Technical Improvements
+- `TranslatableScope` global scope, applied automatically by the `HasTranslations` trait.
+- Query macros: `withTranslations()`, `searchByTranslation()`, `searchByTranslationExact()`, `searchByTranslationStartsWith()`, `searchByTranslationEndsWith()`, `whereHasTranslation()`, `whereTranslation()`, `orderByTranslation()`.
+- `LocaleResolver` class for managing the locale fallback chain (defaults to `app()->getLocale()` and `app()->getFallbackLocale()`).
+- Instance methods: `setTranslation()`, `setTranslations()`, `getTranslation()`, `getTranslations()`, `getAllTranslations()`, `hasTranslation()`, `getUntranslated()`.
+- Support for both a `protected $translatable = [...]` property and a `translatedKeys()` method to declare translatable attributes.
 
-#### Code Architecture
-- **NEW**: `TranslatableScope` class with extension pattern following Laravel conventions
-- **NEW**: Proper macro registration for all query scope methods
-- **NEW**: Translation map caching for efficient attribute access
-- **IMPROVED**: Return query builder from all scope macros for method chaining
-- **NEW**: Database-agnostic query generation using Laravel's grammar system
+### Changed
 
-#### Bug Fixes
-- **FIXED**: `orderByTranslation()` now returns query builder instead of null
-- **FIXED**: All search methods properly return query builder for chaining
-- **FIXED**: `orderByTranslation()` uses database-agnostic subqueries to avoid SQL errors
-- **FIXED**: Proper correlated subqueries in ordering to match correct translation records
+- `orderByTranslation()` uses correlated subqueries instead of joins, making ordering database-agnostic.
+- Search queries use `whereIn()` / `whereColumn()` for better index utilization.
+- Translation lookups use an indexed map for O(1) attribute access after the initial load.
+- README rewritten to match the new API.
 
-### 📋 Complete API Reference
+## [1.5.0] - 2025-07-23
 
-#### Query Scope Methods
-```php
-Model::withTranslations(?array $locales = null)
-Model::searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like')
-Model::searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null)
-Model::searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null)
-Model::searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null)
-Model::whereHasTranslation(string $key, string|array|null $locales = null)
-Model::whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact')
-Model::orderByTranslation(string $key, string $direction = 'asc')
-```
+### Added
 
-#### Instance Methods
-```php
-$model->setTranslation(string $key, string $value, ?string $locale = null)
-$model->setTranslations(array $translations, ?string $locale = null)
-$model->getTranslation(string $key, string|array|null $locales = null)
-$model->getTranslations(string $key, string|array|null $locales = null)
-$model->getAllTranslations(string $key)
-$model->hasTranslation(string $key, ?string $locale = null)
-$model->getUntranslated(string $key)
-```
+- Laravel 12 support.
 
-### 🎯 Migration Guide
+## [1.4.1] - 2025-03-17
 
-#### For New Users
-1. Add `HasTranslations` trait to your models
-2. Define `protected $translatable = ['field1', 'field2']`
-3. Use `withTranslations()` when querying to eager load translations
-4. Access translated fields normally: `$model->field1`
+### Removed
 
-#### For Existing Users
-- No code changes required
-- All existing functionality preserved
-- New query methods available immediately
-- Consider using `withTranslations()` for better performance
+- Remaining Nova integration code.
 
----
+## [1.4.0] - 2025-03-06
 
-### Credits
+### Changed
 
-- **Bug Fixes**: Fixed return statements in all query scope macros
-- **Database Compatibility**: Implemented database-agnostic orderBy using Laravel's query builder
-- **Documentation**: Accurate README and CHANGELOG reflecting actual implementation
-- **Code Quality**: Consistent method signatures and proper type hints throughout
+- Improved translation loading.
+
+### Removed
+
+- Nova field/integration support.
+
+## [1.3.1] - 2025-01-06
+
+### Added
+
+- Dedicated resolver class powering the locale fallback chain.
+
+## [1.3.0] - 2024-11-11
+
+### Added
+
+- Better support for dependent translatable fields.
+
+## [1.2.2] - 2024-07-05
+
+### Added
+
+- Method to set the fallback locale at runtime.
+
+## [1.2.1] - 2024-06-25
+
+### Added
+
+- Query scopes for searching translations and ordering by translated columns.
+- Locale-specific rules for Nova fields.
+
+## [1.2.0] - 2024-06-24
+
+### Added
+
+- `withoutTranslations()` helper to skip the translation layer on a query.
+
+## [1.1.2] - 2024-06-21
+
+### Added
+
+- Fallback handling for the dynamic translation accessor.
+
+## [1.1.1] - 2024-06-20
+
+### Changed
+
+- Additional support for the translatable Nova field.
+
+## [1.1.0] - 2024-06-18
+
+### Added
+
+- Dynamic accessor that reads translatable attributes off the model.
+
+## [1.0.3] - 2024-02-01
+
+### Fixed
+
+- Allow `null` returns from translation lookups.
+
+## [1.0.2] - 2024-01-24
+
+### Added
+
+- Documented model property annotations.
+
+## [1.0.1] - 2024-01-09
+
+### Added
+
+- Allow a custom translatable model class.
+
+## [1.0] - 2024-01-09
+
+### Added
+
+- Initial release.
+
+[2.2.0]: https://github.com/mindtwo/laravel-translatable/compare/2.1.0...2.2.0
+[2.1.0]: https://github.com/mindtwo/laravel-translatable/compare/2.0.0...2.1.0
+[2.0.0]: https://github.com/mindtwo/laravel-translatable/compare/1.5.0...2.0.0
+[1.5.0]: https://github.com/mindtwo/laravel-translatable/compare/1.4.1...1.5.0
+[1.4.1]: https://github.com/mindtwo/laravel-translatable/compare/1.4.0...1.4.1
+[1.4.0]: https://github.com/mindtwo/laravel-translatable/compare/1.3.1...1.4.0
+[1.3.1]: https://github.com/mindtwo/laravel-translatable/compare/1.3.0...1.3.1
+[1.3.0]: https://github.com/mindtwo/laravel-translatable/compare/1.2.2...1.3.0
+[1.2.2]: https://github.com/mindtwo/laravel-translatable/compare/1.2.1...1.2.2
+[1.2.1]: https://github.com/mindtwo/laravel-translatable/compare/1.2.0...1.2.1
+[1.2.0]: https://github.com/mindtwo/laravel-translatable/compare/1.1.2...1.2.0
+[1.1.2]: https://github.com/mindtwo/laravel-translatable/compare/1.1.1...1.1.2
+[1.1.1]: https://github.com/mindtwo/laravel-translatable/compare/1.1.0...1.1.1
+[1.1.0]: https://github.com/mindtwo/laravel-translatable/compare/1.0.3...1.1.0
+[1.0.3]: https://github.com/mindtwo/laravel-translatable/compare/1.0.2...1.0.3
+[1.0.2]: https://github.com/mindtwo/laravel-translatable/compare/1.0.1...1.0.2
+[1.0.1]: https://github.com/mindtwo/laravel-translatable/compare/1.0...1.0.1
+[1.0]: https://github.com/mindtwo/laravel-translatable/releases/tag/1.0

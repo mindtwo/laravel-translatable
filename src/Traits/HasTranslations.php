@@ -10,37 +10,64 @@ use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 use mindtwo\LaravelTranslatable\Scopes\TranslatableScope;
 
 /**
- * Trait HasTranslations
- *
- * Provides translation functionality for Eloquent models using eager loading and optimized
- * attribute access. Supports locale fallback chains and automatic attribute translation.
+ * Add translation support to an Eloquent model.
  *
  * @property-read Collection<int, Translatable> $translations
  * @property-read int|null $translations_count
  *
- * @method static Builder<static>|static withTranslations(?array $locales = null) Eager load translations for specified locales (or default locale chain)
- * @method static Builder<static>|static searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like', string $boolean = 'and') Search in translated fields with locale fallback support
- * @method static Builder<static>|static searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for exact matches in translated fields
- * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for translated fields that start with the given text
- * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and') Search for translated fields that end with the given text
- * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null, string $boolean = 'and') Filter models that have a translation for the given key and locale(s)
- * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact') Filter models where translation matches a specific value
- * @method static Builder<static>|static orderByTranslation(string $key, string $direction = 'asc') Order by translated field values
+ * @method static Builder<static>|static withTranslations(?array $locales = null)
+ * @method static Builder<static>|static searchByTranslation(string|array $key, string $search, string|array|null $locales = null, string $operator = 'like', string $boolean = 'and')
+ * @method static Builder<static>|static searchByTranslationExact(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and')
+ * @method static Builder<static>|static searchByTranslationStartsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and')
+ * @method static Builder<static>|static searchByTranslationEndsWith(string|array $key, string $search, string|array|null $locales = null, string $boolean = 'and')
+ * @method static Builder<static>|static whereHasTranslation(string $key, string|array|null $locales = null, string $boolean = 'and')
+ * @method static Builder<static>|static whereTranslation(string $key, string $value, string|array|null $locales = null, string $operator = 'exact')
+ * @method static Builder<static>|static orderByTranslation(string $key, string $direction = 'asc')
  *
  * @phpstan-ignore trait.unused
  */
 trait HasTranslations
 {
+    /**
+     * The resolved locale fallback chain for this instance.
+     *
+     * @var array<int, string>|null
+     */
     protected ?array $resolvedLocales = null;
 
+    /**
+     * The indexed translations keyed by locale and key.
+     *
+     * @var array<string, array<string, string>>|null
+     */
     protected ?array $translationsMap = null;
 
+    /**
+     * The locales that have been queried for this instance.
+     *
+     * @var array<string, true>
+     */
     protected array $loadedLocales = [];
 
+    /**
+     * The cached list of translatable attribute keys.
+     *
+     * @var array<int, string>|null
+     */
     protected ?array $cachedTranslatableAttributes = null;
 
     /**
-     * Get all the translations for the model.
+     * Boot the has-translations trait for a model.
+     */
+    protected static function bootHasTranslations(): void
+    {
+        static::addGlobalScope(new TranslatableScope);
+    }
+
+    /**
+     * Get all of the translations for the model.
+     *
+     * @return MorphMany<Translatable, $this>
      */
     public function translations(): MorphMany
     {
@@ -48,23 +75,15 @@ trait HasTranslations
     }
 
     /**
-     * Boot the HasTranslations trait.
-     */
-    protected static function bootHasTranslations(): void
-    {
-        // Register the TranslatableScope automatically
-        static::addGlobalScope(new TranslatableScope);
-    }
-
-    /**
-     * Get the translated value for a given key using the locale fallback chain.
+     * Get the translated value for the given key using the locale fallback chain.
+     *
+     * @param  string|array<int, string>|null  $locales
      */
     public function getTranslation(string $key, string|array|null $locales = null): mixed
     {
         $locales = $this->getResolvedLocales($locales);
 
         if (count($locales) === 0) {
-            // No locales specified, return default attribute value
             return parent::getAttribute($key);
         }
 
@@ -94,24 +113,17 @@ trait HasTranslations
     }
 
     /**
-     * Get the untranslated value for a given key.
-     * This returns the base attribute value if no translation exists.
-     *
-     * @param  string  $key  The translation key to retrieve
-     * @return mixed The untranslated value
+     * Get the untranslated value for the given key from the model's own table.
      */
     public function getUntranslated(string $key): mixed
     {
-        // Return the base attribute value if no translation exists
         return parent::getAttribute($key);
     }
 
     /**
-     * Get all translations for a specific key across all locales.
-     * Returns an associative array with locale as key and translation as value.
+     * Get every translation for the given key, keyed by locale.
      *
-     * @param  string  $key  The translation key to retrieve
-     * @return array<string, string> Associative array of translations by locale
+     * @return array<string, string>
      */
     public function getAllTranslations(string $key): array
     {
@@ -122,19 +134,16 @@ trait HasTranslations
     }
 
     /**
-     * Get translations for a specific key across all locales.
-     * Returns an associative array with locale as key and translation as value.
+     * Get the translations for the given key, filtered by the locale chain.
      *
-     * @param  string  $key  The translation key to retrieve
-     * @param  string|array<string>|null  $locales  Optional specific locales to filter by
-     * @return array<string, string> Associative array of translations by locale
+     * @param  string|array<int, string>|null  $locales
+     * @return array<string, string>
      */
     public function getTranslations(string $key, string|array|null $locales = null): array
     {
         $locales = $this->getResolvedLocales($locales);
 
         if (count($locales) === 0) {
-            // No locales specified, return empty array
             return [];
         }
 
@@ -162,7 +171,7 @@ trait HasTranslations
     }
 
     /**
-     * Check if the model has a translation for the given key and locale.
+     * Determine if the model has a translation for the given key and locale.
      */
     public function hasTranslation(string $key, ?string $locale = null): bool
     {
@@ -199,7 +208,6 @@ trait HasTranslations
             ['text' => $value]
         );
 
-        // Update cache directly without forcing full reindex
         if ($this->translationsMap !== null) {
             $this->translationsMap[$locale][$key] = $value;
         }
@@ -245,7 +253,9 @@ trait HasTranslations
     }
 
     /**
-     * Override getAttribute to automatically translate attributes.
+     * Get an attribute from the model, automatically translating it when applicable.
+     *
+     * @param  string  $key
      */
     public function getAttribute($key): mixed
     {
@@ -264,7 +274,7 @@ trait HasTranslations
     }
 
     /**
-     * Build an optimized index of translations for O(1) attribute access.
+     * Build an indexed map of translations for O(1) attribute access.
      */
     public function indexTranslations(): void
     {
@@ -281,6 +291,9 @@ trait HasTranslations
         $this->translationsMap = [];
     }
 
+    /**
+     * Get the default locale that is stored on the model itself, if any.
+     */
     public function defaultLocaleOnModel(): ?string
     {
         if (config('translatable.default_locale_on_model')) {
@@ -290,6 +303,11 @@ trait HasTranslations
         return null;
     }
 
+    /**
+     * Mark the given locales as already loaded for this instance.
+     *
+     * @param  array<int, string>  $locales
+     */
     public function addLoadedLocales(array $locales): void
     {
         foreach ($locales as $locale) {
@@ -299,6 +317,8 @@ trait HasTranslations
 
     /**
      * Get the locale fallback chain for this model.
+     *
+     * @return array<int, string>
      */
     protected function getLocaleChain(): array
     {
@@ -307,6 +327,9 @@ trait HasTranslations
 
     /**
      * Resolve and cache the locale chain for translation lookups.
+     *
+     * @param  string|array<int, string>|null  $locales
+     * @return array<int, string>
      */
     protected function getResolvedLocales(string|array|null $locales = null): array
     {
@@ -324,7 +347,7 @@ trait HasTranslations
     }
 
     /**
-     * Check if automatic attribute translation is enabled for this model.
+     * Determine if automatic attribute translation is enabled for this model.
      */
     protected function autoTranslateAttributes(): bool
     {
@@ -332,7 +355,9 @@ trait HasTranslations
     }
 
     /**
-     * Get the list of translatable attribute keys.
+     * Get the translatable attribute keys defined on the model.
+     *
+     * @return array<int, string>
      */
     protected function getTranslatableAttributes(): array
     {
@@ -340,12 +365,10 @@ trait HasTranslations
             return $this->cachedTranslatableAttributes;
         }
 
-        // Backwards compatibility: check for translatedKeys method first
         if (method_exists($this, 'translatedKeys')) {
             return $this->cachedTranslatableAttributes = $this->translatedKeys();
         }
 
-        // Check for $translatable property (similar to spatie/laravel-translatable)
         if (property_exists($this, 'translatable') && is_array($this->translatable)) {
             return $this->cachedTranslatableAttributes = $this->translatable;
         }
@@ -354,7 +377,7 @@ trait HasTranslations
     }
 
     /**
-     * Ensure translations for a specific locale are loaded and indexed.
+     * Ensure the translations for the given locale are loaded and indexed.
      */
     protected function ensureLocaleLoaded(string $locale): void
     {
@@ -362,7 +385,6 @@ trait HasTranslations
             return;
         }
 
-        // Do not attempt to load locale multiple times if no results are found
         if (isset($this->loadedLocales[$locale])) {
             return;
         }
