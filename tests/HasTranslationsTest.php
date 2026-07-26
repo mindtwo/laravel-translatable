@@ -487,3 +487,77 @@ test('searchByTranslation performance with complex fallback chains', function ()
     // Reset locale
     app()->setLocale('en');
 });
+
+test('setTranslation stores a row for a non-default locale', function () {
+    $model = TestModel::create();
+
+    $model->setTranslation('title', 'Deutscher Titel', 'de');
+
+    expect($model->translations()->where('locale', 'de')->where('key', 'title')->value('text'))
+        ->toBe('Deutscher Titel');
+});
+
+test('setTranslation with null removes the translation row', function () {
+    $model = TestModel::create();
+    $model->translations()->create(['key' => 'title', 'locale' => 'de', 'text' => 'Deutscher Titel']);
+
+    $model->setTranslation('title', null, 'de');
+
+    expect($model->translations()->where('locale', 'de')->where('key', 'title')->exists())->toBeFalse();
+});
+
+test('forgetTranslation removes only the given locale row', function () {
+    $model = TestModel::create();
+    $model->translations()->createMany([
+        ['key' => 'title', 'locale' => 'de', 'text' => 'Deutscher Titel'],
+        ['key' => 'title', 'locale' => 'fr', 'text' => 'Titre Français'],
+    ]);
+
+    $model->forgetTranslation('title', 'de');
+
+    expect($model->translations()->where('key', 'title')->pluck('locale')->all())->toBe(['fr']);
+});
+
+test('setTranslation writes the default locale to the model itself', function () {
+    config()->set('translatable.default_locale_on_model', true);
+    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+
+    $model = TestModel::create();
+
+    $model->setTranslation('title', 'English Title', 'en');
+
+    expect($model->getUntranslated('title'))->toBe('English Title')
+        ->and($model->translations()->count())->toBe(0);
+
+    $model->save();
+
+    expect(TestModel::query()->first()->getUntranslated('title'))->toBe('English Title');
+});
+
+test('forgetTranslation clears the default locale on the model itself', function () {
+    config()->set('translatable.default_locale_on_model', true);
+    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+
+    $model = TestModel::create(['title' => 'English Title']);
+
+    $model->forgetTranslation('title', 'en');
+
+    expect($model->getUntranslated('title'))->toBeNull()
+        ->and($model->translations()->count())->toBe(0);
+});
+
+test('setTranslations routes values per locale and removes nulls', function () {
+    config()->set('translatable.default_locale_on_model', true);
+    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+
+    $model = TestModel::create();
+    $model->translations()->create(['key' => 'description', 'locale' => 'de', 'text' => 'Alte Beschreibung']);
+
+    $model->setTranslations(['title' => 'English Title', 'description' => 'English Description'], 'en');
+    $model->setTranslations(['title' => 'Deutscher Titel', 'description' => null], 'de');
+
+    expect($model->getUntranslated('title'))->toBe('English Title')
+        ->and($model->getUntranslated('description'))->toBe('English Description')
+        ->and($model->translations()->where('locale', 'de')->pluck('text', 'key')->all())
+        ->toBe(['title' => 'Deutscher Titel']);
+});

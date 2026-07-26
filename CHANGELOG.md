@@ -4,6 +4,12 @@ All notable changes to `laravel-translatable` will be documented in this file.
 
 ## [Unreleased] - 2024-XX-XX
 
+### Write API
+
+- **NEW**: `forgetTranslation($key, $locale)` — removes a translation row; for the default locale (with `default_locale_on_model`) it nulls the model attribute instead
+- **CHANGED**: `setTranslation()` accepts `null` to remove a translation
+- **CHANGED**: with `default_locale_on_model` enabled, `setTranslation()`/`setTranslations()` write the default locale to the model attribute (persisted on the next `save()`) instead of creating a translation row that is never read
+
 ### 🎉 Major Features Added
 
 #### Scope-Based Architecture

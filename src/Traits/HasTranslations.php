@@ -175,11 +175,24 @@ trait HasTranslations
     }
 
     /**
-     * Set or update the translation for the given key and locale.
+     * Set or update the translation for the given key and locale. A null value removes
+     * the translation.
      */
-    public function setTranslation(string $key, string $value, ?string $locale = null): self
+    public function setTranslation(string $key, ?string $value, ?string $locale = null): self
     {
         $locale = $locale ?? $this->getLocaleChain()[0] ?? app()->getLocale();
+
+        // The default locale lives on the model itself — translation rows for it are
+        // never read. The attribute persists with the model's next save().
+        if ($locale === $this->defaultLocaleOnModel()) {
+            $this->setAttribute($key, $value);
+
+            return $this;
+        }
+
+        if ($value === null) {
+            return $this->forgetTranslation($key, $locale);
+        }
 
         $this->translations()->updateOrCreate(
             ['key' => $key, 'locale' => $locale],
@@ -195,25 +208,38 @@ trait HasTranslations
     }
 
     /**
-     * Set multiple translations at once for a given locale.
+     * Set multiple translations at once for a given locale. Null values remove the
+     * translation for their key.
+     *
+     * @param  array<string, string|null>  $translations
      */
     public function setTranslations(array $translations, ?string $locale = null): self
     {
+        foreach ($translations as $key => $value) {
+            $this->setTranslation($key, $value, $locale);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Remove the translation for the given key and locale. For the default locale
+     * stored on the model itself, the attribute is set to null instead and persists
+     * with the model's next save().
+     */
+    public function forgetTranslation(string $key, ?string $locale = null): self
+    {
         $locale = $locale ?? $this->getLocaleChain()[0] ?? app()->getLocale();
 
-        foreach ($translations as $key => $value) {
-            $this->translations()->updateOrCreate(
-                ['key' => $key, 'locale' => $locale],
-                ['text' => $value]
-            );
+        if ($locale === $this->defaultLocaleOnModel()) {
+            $this->setAttribute($key, null);
+
+            return $this;
         }
 
-        // Update cache directly without forcing full reindex
-        if ($this->translationsMap !== null) {
-            foreach ($translations as $key => $value) {
-                $this->translationsMap[$locale][$key] = $value;
-            }
-        }
+        $this->translations()->where('key', '=', $key)->where('locale', '=', $locale)->delete();
+
+        unset($this->translationsMap[$locale][$key]);
 
         return $this;
     }
