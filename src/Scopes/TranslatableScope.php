@@ -3,7 +3,6 @@
 namespace mindtwo\LaravelTranslatable\Scopes;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Scope;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
@@ -69,7 +68,7 @@ class TranslatableScope implements Scope
             }
 
             return $query->with([
-                'translations' => fn (MorphMany $q) => $q->whereIn('locale', $locales),
+                'translations' => fn ($q) => $q->whereIn('locale', $locales),
             ])->afterQuery(fn ($results) => $results->each(fn ($result) => $result->addLoadedLocales($locales)));
         });
 
@@ -90,37 +89,7 @@ class TranslatableScope implements Scope
             string $operator = 'like',
             string $boolean = 'and',
         ) {
-            $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
-
-            $searchValue = match ($operator) {
-                'like' => "%{$search}%",
-                'starts_with' => "{$search}%",
-                'ends_with' => "%{$search}",
-                'exact' => $search,
-                default => "%{$search}%"
-            };
-
-            // Ensure boolean is either 'and' or 'or'
-            if (! in_array(strtolower($boolean), ['and', 'or'])) {
-                $boolean = 'and';
-            }
-            $boolean = strtolower($boolean);
-
-            // Comparison operator based on the search type
-            $comparison = $operator === 'exact' ? '=' : 'like';
-
-            return $query->has(
-                relation: 'translations',
-                boolean: $boolean,
-                callback: function ($q) use ($key, $searchValue, $localePriority, $comparison) {
-                    $q->whereIn('locale', $localePriority)
-                        ->when(
-                            is_array($key),
-                            fn ($q) => $q->whereIn('key', $key),
-                            fn ($q) => $q->where('key', $key)
-                        )
-                        ->where('text', $comparison, $searchValue);
-                });
+            return TranslatableScope::applyTranslationSearch($query, $key, $search, $locales, $operator, $boolean);
         });
 
         // Add additional macros for exact, starts_with, and ends_with searches
@@ -131,7 +100,7 @@ class TranslatableScope implements Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'exact', $boolean);
+            return TranslatableScope::applyTranslationSearch($query, $key, $search, $locales, 'exact', $boolean);
         });
 
         $builder->macro('searchByTranslationStartsWith', function (
@@ -141,7 +110,7 @@ class TranslatableScope implements Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'starts_with', $boolean);
+            return TranslatableScope::applyTranslationSearch($query, $key, $search, $locales, 'starts_with', $boolean);
         });
 
         $builder->macro('searchByTranslationEndsWith', function (
@@ -151,8 +120,59 @@ class TranslatableScope implements Scope
             string|array|null $locales = null,
             string $boolean = 'and',
         ) {
-            return $query->searchByTranslation($key, $search, $locales, 'ends_with', $boolean);
+            return TranslatableScope::applyTranslationSearch($query, $key, $search, $locales, 'ends_with', $boolean);
         });
+    }
+
+    /**
+     * Apply the translation search to the query. The search macros share this
+     * implementation instead of calling each other on the builder, where static
+     * analysis cannot resolve macro methods.
+     *
+     * @param  Builder<*>  $query
+     * @param  string|array<int, string>  $key
+     * @param  string|array<int, string>|null  $locales
+     * @return Builder<*>
+     */
+    public static function applyTranslationSearch(
+        Builder $query,
+        string|array $key,
+        string $search,
+        string|array|null $locales = null,
+        string $operator = 'like',
+        string $boolean = 'and',
+    ): Builder {
+        $localePriority = resolve(LocaleResolver::class)->normalizeLocales($locales);
+
+        $searchValue = match ($operator) {
+            'like' => "%{$search}%",
+            'starts_with' => "{$search}%",
+            'ends_with' => "%{$search}",
+            'exact' => $search,
+            default => "%{$search}%"
+        };
+
+        // Ensure boolean is either 'and' or 'or'
+        if (! in_array(strtolower($boolean), ['and', 'or'])) {
+            $boolean = 'and';
+        }
+        $boolean = strtolower($boolean);
+
+        // Comparison operator based on the search type
+        $comparison = $operator === 'exact' ? '=' : 'like';
+
+        return $query->has(
+            relation: 'translations',
+            boolean: $boolean,
+            callback: function ($q) use ($key, $searchValue, $localePriority, $comparison) {
+                $q->whereIn('locale', $localePriority)
+                    ->when(
+                        is_array($key),
+                        fn ($q) => $q->whereIn('key', $key),
+                        fn ($q) => $q->where('key', $key)
+                    )
+                    ->where('text', $comparison, $searchValue);
+            });
     }
 
     /**
@@ -196,7 +216,7 @@ class TranslatableScope implements Scope
             string|array|null $locales = null,
             string $operator = 'exact'
         ) {
-            $query->searchByTranslation($key, $value, $locales, $operator);
+            TranslatableScope::applyTranslationSearch($query, $key, $value, $locales, $operator);
         });
     }
 
