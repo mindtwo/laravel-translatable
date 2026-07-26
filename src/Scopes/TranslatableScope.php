@@ -4,6 +4,7 @@ namespace mindtwo\LaravelTranslatable\Scopes;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Scope;
 use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
 
 /**
@@ -27,7 +28,7 @@ use mindtwo\LaravelTranslatable\Resolvers\LocaleResolver;
  *
  * @template TModel of \Illuminate\Database\Eloquent\Model
  */
-class TranslatableScope implements \Illuminate\Database\Eloquent\Scope
+class TranslatableScope implements Scope
 {
     /**
      * The extensions to be added to the builder.

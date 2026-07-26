@@ -520,7 +520,7 @@ test('forgetTranslation removes only the given locale row', function () {
 
 test('setTranslation writes the default locale to the model itself', function () {
     config()->set('translatable.default_locale_on_model', true);
-    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+    resolve(LocaleResolver::class)->setDefaultLocale('en');
 
     $model = TestModel::create();
 
@@ -536,7 +536,7 @@ test('setTranslation writes the default locale to the model itself', function ()
 
 test('forgetTranslation clears the default locale on the model itself', function () {
     config()->set('translatable.default_locale_on_model', true);
-    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+    resolve(LocaleResolver::class)->setDefaultLocale('en');
 
     $model = TestModel::create(['title' => 'English Title']);
 
@@ -548,7 +548,7 @@ test('forgetTranslation clears the default locale on the model itself', function
 
 test('setTranslations routes values per locale and removes nulls', function () {
     config()->set('translatable.default_locale_on_model', true);
-    resolve(\mindtwo\LaravelTranslatable\Resolvers\LocaleResolver::class)->setDefaultLocale('en');
+    resolve(LocaleResolver::class)->setDefaultLocale('en');
 
     $model = TestModel::create();
     $model->translations()->create(['key' => 'description', 'locale' => 'de', 'text' => 'Alte Beschreibung']);
