@@ -139,7 +139,15 @@ $product->setTranslations([
     'title' => 'English Product',
     'description' => 'English Description',
 ], 'en');
+
+// A null value removes the translation, as does forgetTranslation()
+$product->setTranslation('title', null, 'fr');
+$product->forgetTranslation('description', 'fr');
 ```
+
+With `default_locale_on_model` enabled, writes for the default locale are routed to the
+model's own attribute instead of a translation row (rows for the default locale are never
+read) — they persist with the model's next `save()`.
 
 ### 3. Automatic Translation Override
 
@@ -335,8 +343,9 @@ class Article extends Model
 
 | Method | Description | Parameters |
 |--------|-------------|------------|
-| `setTranslation($key, $value, $locale)` | Set translation for a field | `string $key`, `string $value`, `?string $locale` |
+| `setTranslation($key, $value, $locale)` | Set translation for a field; null removes it | `string $key`, `?string $value`, `?string $locale` |
 | `setTranslations($translations, $locale)` | Set multiple translations at once | `array $translations`, `?string $locale` |
+| `forgetTranslation($key, $locale)` | Remove translation for a field | `string $key`, `?string $locale` |
 | `getTranslation($key, $locales)` | Get translated text with fallback | `string $key`, `string\|array\|null $locales` |
 | `getTranslations($key, $locales)` | Get translations as array | `string $key`, `string\|array\|null $locales` |
 | `getAllTranslations($key)` | Get all translations for a key | `string $key` |
